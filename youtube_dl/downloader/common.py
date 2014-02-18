@@ -128,6 +128,9 @@ class FileDownloader(object):
     def to_screen(self, *args, **kargs):
         self.ydl.to_screen(*args, **kargs)
 
+    def to_stdout(self, message):
+        self.ydl.to_stdout(message)
+
     def to_stderr(self, message):
         self.ydl.to_screen(message)
 
