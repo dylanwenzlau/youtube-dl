@@ -9,6 +9,7 @@ from .common import AudioConversionError, PostProcessor
 from ..utils import (
     check_executable,
     compat_subprocess_get_DEVNULL,
+    encodeArgument,
     encodeFilename,
     PostProcessingError,
     prepend_extension,
@@ -17,14 +18,15 @@ from ..utils import (
 )
 
 
-
 class FFmpegPostProcessorError(PostProcessingError):
     pass
 
+
 class FFmpegPostProcessor(PostProcessor):
-    def __init__(self,downloader=None):
+    def __init__(self, downloader=None, deletetempfiles=False):
         PostProcessor.__init__(self, downloader)
         self._exes = self.detect_executables()
+        self._deletetempfiles = deletetempfiles
 
     @staticmethod
     def detect_executables():
@@ -48,17 +50,20 @@ class FFmpegPostProcessor(PostProcessor):
         for path in input_paths:
             files_cmd.extend(['-i', encodeFilename(path, True)])
         cmd = ([self._get_executable(), '-y'] + files_cmd
-               + opts +
+               + [encodeArgument(o) for o in opts] +
                [encodeFilename(self._ffmpeg_filename_argument(out_path), True)])
 
         if self._downloader.params.get('verbose', False):
             self._downloader.to_screen(u'[debug] ffmpeg command line: %s' % shell_quote(cmd))
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout,stderr = p.communicate()
+        stdout, stderr = p.communicate()
         if p.returncode != 0:
             stderr = stderr.decode('utf-8', 'replace')
             msg = stderr.strip().split('\n')[-1]
             raise FFmpegPostProcessorError(msg)
+        if self._deletetempfiles:
+            for ipath in input_paths:
+                os.remove(ipath)
 
     def run_ffmpeg(self, path, out_path, opts):
         self.run_ffmpeg_multiple_files([path], out_path, opts)
@@ -464,7 +469,11 @@ class FFmpegMetadataPP(FFmpegPostProcessor):
         filename = info['filepath']
         temp_filename = prepend_extension(filename, 'temp')
 
-        options = ['-c', 'copy']
+        if info['ext'] == u'm4a':
+            options = ['-vn', '-acodec', 'copy']
+        else:
+            options = ['-c', 'copy']
+
         for (name, value) in metadata.items():
             options.extend(['-metadata', '%s=%s' % (name, value)])
 
@@ -483,3 +492,17 @@ class FFmpegMergerPP(FFmpegPostProcessor):
         self.run_ffmpeg_multiple_files(info['__files_to_merge'], filename, args)
         return True, info
 
+
+class FFmpegAudioFixPP(FFmpegPostProcessor):
+    def run(self, info):
+        filename = info['filepath']
+        temp_filename = prepend_extension(filename, 'temp')
+
+        options = ['-vn', '-acodec', 'copy']
+        self._downloader.to_screen(u'[ffmpeg] Fixing audio file "%s"' % filename)
+        self.run_ffmpeg(filename, temp_filename, options)
+
+        os.remove(encodeFilename(filename))
+        os.rename(encodeFilename(temp_filename), encodeFilename(filename))
+
+        return True, info

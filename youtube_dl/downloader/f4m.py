@@ -12,7 +12,6 @@ from .http import HttpFD
 from ..utils import (
     struct_pack,
     struct_unpack,
-    compat_urllib_request,
     compat_urlparse,
     format_bytes,
     encodeFilename,
@@ -117,8 +116,8 @@ class FlvReader(io.BytesIO):
         self.read_unsigned_char()
         # flags
         self.read(3)
-        # BootstrapinfoVersion
-        bootstrap_info_version = self.read_unsigned_int()
+
+        self.read_unsigned_int()  # BootstrapinfoVersion
         # Profile,Live,Update,Reserved
         self.read(1)
         # time scale
@@ -127,15 +126,15 @@ class FlvReader(io.BytesIO):
         self.read_unsigned_long_long()
         # SmpteTimeCodeOffset
         self.read_unsigned_long_long()
-        # MovieIdentifier
-        movie_identifier = self.read_string()
+
+        self.read_string()  # MovieIdentifier
         server_count = self.read_unsigned_char()
         # ServerEntryTable
         for i in range(server_count):
             self.read_string()
         quality_count = self.read_unsigned_char()
         # QualityEntryTable
-        for i in range(server_count):
+        for i in range(quality_count):
             self.read_string()
         # DrmData
         self.read_string()
@@ -221,6 +220,7 @@ class F4mFD(FileDownloader):
 
     def real_download(self, filename, info_dict):
         man_url = info_dict['url']
+        requested_bitrate = info_dict.get('tbr')
         self.to_screen('[download] Downloading f4m manifest')
         manifest = self.ydl.urlopen(man_url).read()
         self.report_destination(filename)
@@ -234,8 +234,14 @@ class F4mFD(FileDownloader):
 
         doc = etree.fromstring(manifest)
         formats = [(int(f.attrib.get('bitrate', -1)), f) for f in doc.findall(_add_ns('media'))]
-        formats = sorted(formats, key=lambda f: f[0])
-        rate, media = formats[-1]
+        if requested_bitrate is None:
+            # get the best format
+            formats = sorted(formats, key=lambda f: f[0])
+            rate, media = formats[-1]
+        else:
+            rate, media = list(filter(
+                lambda f: int(f[0]) == requested_bitrate, formats))[0]
+
         base_url = compat_urlparse.urljoin(man_url, media.attrib['url'])
         bootstrap = base64.b64decode(doc.find(_add_ns('bootstrapInfo')).text)
         metadata = base64.b64decode(media.find(_add_ns('metadata')).text)
@@ -298,6 +304,7 @@ class F4mFD(FileDownloader):
                         break
             frags_filenames.append(frag_filename)
 
+        dest_stream.close()
         self.report_finish(format_bytes(state['downloaded_bytes']), time.time() - start)
 
         self.try_rename(tmpfilename, filename)

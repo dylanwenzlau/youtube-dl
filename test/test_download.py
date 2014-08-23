@@ -8,10 +8,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from test.helper import (
     get_params,
-    get_testcases,
+    gettestcases,
+    expect_info_dict,
     try_rm,
-    md5,
-    report_warning
+    report_warning,
 )
 
 
@@ -23,7 +23,6 @@ import socket
 import youtube_dl.YoutubeDL
 from youtube_dl.utils import (
     compat_http_client,
-    compat_str,
     compat_urllib_error,
     compat_HTTPError,
     DownloadError,
@@ -50,7 +49,7 @@ def _file_md5(fn):
     with open(fn, 'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
 
-defs = get_testcases()
+defs = gettestcases()
 
 
 class TestDownload(unittest.TestCase):
@@ -64,17 +63,21 @@ def generator(test_case):
     def test_template(self):
         ie = youtube_dl.extractor.get_info_extractor(test_case['name'])
         other_ies = [get_info_extractor(ie_key) for ie_key in test_case.get('add_ie', [])]
+        is_playlist = any(k.startswith('playlist') for k in test_case)
+        test_cases = test_case.get(
+            'playlist', [] if is_playlist else [test_case])
+
         def print_skipping(reason):
             print('Skipping %s: %s' % (test_case['name'], reason))
         if not ie.working():
             print_skipping('IE marked as not _WORKING')
             return
-        if 'playlist' not in test_case:
-            info_dict = test_case.get('info_dict', {})
-            if not test_case.get('file') and not (info_dict.get('id') and info_dict.get('ext')):
-                print_skipping('The output file cannot be know, the "file" '
-                    'key is missing or the info_dict is incomplete')
-                return
+
+        for tc in test_cases:
+            info_dict = tc.get('info_dict', {})
+            if not tc.get('file') and not (info_dict.get('id') and info_dict.get('ext')):
+                raise Exception('Test definition incorrect. The output file cannot be known. Are both \'id\' and \'ext\' keys present?')
+
         if 'skip' in test_case:
             print_skipping(test_case['skip'])
             return
@@ -84,6 +87,9 @@ def generator(test_case):
                 return
 
         params = get_params(test_case.get('params', {}))
+        if is_playlist and 'playlist' not in test_case:
+            params.setdefault('extract_flat', True)
+            params.setdefault('skip_download', True)
 
         ydl = YoutubeDL(params)
         ydl.add_default_info_extractors()
@@ -96,7 +102,6 @@ def generator(test_case):
         def get_tc_filename(tc):
             return tc.get('file') or ydl.prepare_filename(tc.get('info_dict', {}))
 
-        test_cases = test_case.get('playlist', [test_case])
         def try_rm_tcs_files():
             for tc in test_cases:
                 tc_filename = get_tc_filename(tc)
@@ -108,7 +113,10 @@ def generator(test_case):
             try_num = 1
             while True:
                 try:
-                    ydl.download([test_case['url']])
+                    # We're not using .download here sine that is just a shim
+                    # for outside error handling, and returns the exit code
+                    # instead of the result dict.
+                    res_dict = ydl.extract_info(test_case['url'])
                 except (DownloadError, ExtractorError) as err:
                     # Check if the exception is not a network related one
                     if not err.exc_info[0] in (compat_urllib_error.URLError, socket.timeout, UnavailableVideoError, compat_http_client.BadStatusLine) or (err.exc_info[0] == compat_HTTPError and err.exc_info[1].code == 503):
@@ -124,6 +132,17 @@ def generator(test_case):
                 else:
                     break
 
+            if is_playlist:
+                self.assertEqual(res_dict['_type'], 'playlist')
+                expect_info_dict(self, test_case.get('info_dict', {}), res_dict)
+            if 'playlist_mincount' in test_case:
+                self.assertGreaterEqual(
+                    len(res_dict['entries']),
+                    test_case['playlist_mincount'],
+                    'Expected at least %d in playlist %s, but got only %d' % (
+                        test_case['playlist_mincount'], test_case['url'],
+                        len(res_dict['entries'])))
+
             for tc in test_cases:
                 tc_filename = get_tc_filename(tc)
                 if not test_case.get('params', {}).get('skip_download', False):
@@ -136,27 +155,8 @@ def generator(test_case):
                     self.assertEqual(md5_for_file, tc['md5'])
                 with io.open(info_json_fn, encoding='utf-8') as infof:
                     info_dict = json.load(infof)
-                for (info_field, expected) in tc.get('info_dict', {}).items():
-                    if isinstance(expected, compat_str) and expected.startswith('md5:'):
-                        got = 'md5:' + md5(info_dict.get(info_field))
-                    else:
-                        got = info_dict.get(info_field)
-                    self.assertEqual(expected, got,
-                        u'invalid value for field %s, expected %r, got %r' % (info_field, expected, got))
 
-                # If checkable fields are missing from the test case, print the info_dict
-                test_info_dict = dict((key, value if not isinstance(value, compat_str) or len(value) < 250 else 'md5:' + md5(value))
-                    for key, value in info_dict.items()
-                    if value and key in ('title', 'description', 'uploader', 'upload_date', 'uploader_id', 'location'))
-                if not all(key in tc.get('info_dict', {}).keys() for key in test_info_dict.keys()):
-                    sys.stderr.write(u'\n"info_dict": ' + json.dumps(test_info_dict, ensure_ascii=False, indent=4) + u'\n')
-
-                # Check for the presence of mandatory fields
-                for key in ('id', 'url', 'title', 'ext'):
-                    self.assertTrue(key in info_dict.keys() and info_dict[key])
-                # Check for mandatory fields that are automatically set by YoutubeDL
-                for key in ['webpage_url', 'extractor', 'extractor_key']:
-                    self.assertTrue(info_dict.get(key), u'Missing field: %s' % key)
+                expect_info_dict(self, tc.get('info_dict', {}), info_dict)
         finally:
             try_rm_tcs_files()
 

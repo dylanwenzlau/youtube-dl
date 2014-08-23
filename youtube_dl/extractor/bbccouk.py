@@ -13,13 +13,13 @@ class BBCCoUkIE(SubtitlesInfoExtractor):
 
     _TESTS = [
         {
-            'url': 'http://www.bbc.co.uk/programmes/p01q7wz1',
+            'url': 'http://www.bbc.co.uk/programmes/b039g8p7',
             'info_dict': {
-                'id': 'p01q7wz4',
+                'id': 'b039d07m',
                 'ext': 'flv',
-                'title': 'Friction: Blu Mar Ten guest mix: Blu Mar Ten - Guest Mix',
-                'description': 'Blu Mar Ten deliver a Guest Mix for Friction.',
-                'duration': 1936,
+                'title': 'Kaleidoscope: Leonard Cohen',
+                'description': 'md5:db4755d7a665ae72343779f7dacb402c',
+                'duration': 1740,
             },
             'params': {
                 # rtmp download
@@ -161,6 +161,11 @@ class BBCCoUkIE(SubtitlesInfoExtractor):
     def _real_extract(self, url):
         mobj = re.match(self._VALID_URL, url)
         group_id = mobj.group('id')
+
+        webpage = self._download_webpage(url, group_id, 'Downloading video page')
+        if re.search(r'id="emp-error" class="notinuk">', webpage):
+            raise ExtractorError('Currently BBC iPlayer TV programmes are available to play in the UK only',
+                expected=True)
 
         playlist = self._download_xml('http://www.bbc.co.uk/iplayer/playlist/%s' % group_id, group_id,
             'Downloading playlist XML')
