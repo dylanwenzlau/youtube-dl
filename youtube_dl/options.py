@@ -428,7 +428,7 @@ def parseOpts(overrideArguments=None):
         help='simulate, quiet but print output format')
     verbosity.add_option(
         '--get-filesize',
-        action='store_true', dest='get_filesize', default=False
+        action='store_true', dest='get_filesize', default=False,
         help='simulate, quiet but print video filesize')
     verbosity.add_option(
         '-j', '--dump-json',
