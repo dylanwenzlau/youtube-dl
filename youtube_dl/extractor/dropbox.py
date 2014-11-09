@@ -5,7 +5,8 @@ import os.path
 import re
 
 from .common import InfoExtractor
-from ..utils import compat_urllib_parse_unquote, url_basename
+from ..compat import compat_urllib_parse_unquote
+from ..utils import url_basename
 
 
 class DropboxIE(InfoExtractor):
@@ -29,9 +30,8 @@ class DropboxIE(InfoExtractor):
         video_id = mobj.group('id')
         fn = compat_urllib_parse_unquote(url_basename(url))
         title = os.path.splitext(fn)[0]
-        video_url = (
-            re.sub(r'[?&]dl=0', '', url) +
-            ('?' if '?' in url else '&') + 'dl=1')
+        video_url = re.sub(r'[?&]dl=0', '', url)
+        video_url += ('?' if '?' not in video_url else '&') + 'dl=1'
 
         return {
             'id': video_id,

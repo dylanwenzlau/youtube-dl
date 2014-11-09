@@ -1,85 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__authors__  = (
-    'Ricardo Garcia Gonzalez',
-    'Danny Colligan',
-    'Benjamin Johnson',
-    'Vasyl\' Vavrychuk',
-    'Witold Baryluk',
-    'Paweł Paprota',
-    'Gergely Imreh',
-    'Rogério Brito',
-    'Philipp Hagemeister',
-    'Sören Schulze',
-    'Kevin Ngo',
-    'Ori Avtalion',
-    'shizeeg',
-    'Filippo Valsorda',
-    'Christian Albrecht',
-    'Dave Vasilevsky',
-    'Jaime Marquínez Ferrándiz',
-    'Jeff Crouse',
-    'Osama Khalid',
-    'Michael Walter',
-    'M. Yasoob Ullah Khalid',
-    'Julien Fraichard',
-    'Johny Mo Swag',
-    'Axel Noack',
-    'Albert Kim',
-    'Pierre Rudloff',
-    'Huarong Huo',
-    'Ismael Mejía',
-    'Steffan \'Ruirize\' James',
-    'Andras Elso',
-    'Jelle van der Waa',
-    'Marcin Cieślak',
-    'Anton Larionov',
-    'Takuya Tsuchida',
-    'Sergey M.',
-    'Michael Orlitzky',
-    'Chris Gahan',
-    'Saimadhav Heblikar',
-    'Mike Col',
-    'Oleg Prutz',
-    'pulpe',
-    'Andreas Schmitz',
-    'Michael Kaiser',
-    'Niklas Laxström',
-    'David Triendl',
-    'Anthony Weems',
-    'David Wagner',
-    'Juan C. Olivares',
-    'Mattias Harrysson',
-    'phaer',
-    'Sainyam Kapoor',
-    'Nicolas Évrard',
-    'Jason Normore',
-    'Hoje Lee',
-    'Adam Thalhammer',
-    'Georg Jähnig',
-    'Ralf Haring',
-    'Koki Takahashi',
-    'Ariset Llerena',
-    'Adam Malcontenti-Wilson',
-    'Tobias Bell',
-    'Naglis Jonaitis',
-    'Charles Chen',
-    'Hassaan Ali',
-    'Dobrosław Żybort',
-    'David Fabijan',
-    'Sebastian Haas',
-    'Alexander Kirk',
-    'Erik Johnson',
-    'Keith Beckman',
-    'Ole Ernst',
-    'Aaron McDaniel (mcd1992)',
-    'Magnus Kolstad',
-    'Hari Padmanaban',
-    'Carlos Ramos',
-    '5moufl',
-)
-
 __license__ = 'Public Domain'
 
 import codecs
@@ -92,9 +13,12 @@ import sys
 from .options import (
     parseOpts,
 )
-from .utils import (
+from .compat import (
+    compat_expanduser,
     compat_getpass,
     compat_print,
+)
+from .utils import (
     DateRange,
     DEFAULT_OUTTMPL,
     decodeOption,
@@ -253,8 +177,6 @@ def _real_main(argv=None):
         date = DateRange.day(opts.date)
     else:
         date = DateRange(opts.dateafter, opts.datebefore)
-    if opts.default_search not in ('auto', 'auto_warning', 'error', 'fixup_error', None) and ':' not in opts.default_search:
-        parser.error(u'--default-search invalid; did you forget a colon (:) at the end?')
 
     # Do not download videos when there are audio-only formats
     if opts.extractaudio and not opts.keepvideo and opts.format is None:
@@ -282,8 +204,8 @@ def _real_main(argv=None):
                      u' file! Use "{0}.%(ext)s" instead of "{0}" as the output'
                      u' template'.format(outtmpl))
 
-    any_printing = opts.geturl or opts.gettitle or opts.getid or opts.getthumbnail or opts.getdescription or opts.getfilename or opts.getformat or opts.getduration or opts.dumpjson
-    download_archive_fn = os.path.expanduser(opts.download_archive) if opts.download_archive is not None else opts.download_archive
+    any_printing = opts.geturl or opts.gettitle or opts.getid or opts.getthumbnail or opts.getdescription or opts.getfilename or opts.getformat or opts.getduration or opts.dumpjson or opts.dump_single_json
+    download_archive_fn = compat_expanduser(opts.download_archive) if opts.download_archive is not None else opts.download_archive
 
     ydl_opts = {
         'usenetrc': opts.usenetrc,
@@ -302,8 +224,9 @@ def _real_main(argv=None):
         'forcefilename': opts.getfilename,
         'forceformat': opts.getformat,
         'forcejson': opts.dumpjson,
-        'simulate': opts.simulate,
-        'skip_download': (opts.skip_download or opts.simulate or any_printing),
+        'dump_single_json': opts.dump_single_json,
+        'simulate': opts.simulate or any_printing,
+        'skip_download': opts.skip_download,
         'format': opts.format,
         'format_limit': opts.format_limit,
         'listformats': opts.listformats,
@@ -368,12 +291,10 @@ def _real_main(argv=None):
         'youtube_include_dash_manifest': opts.youtube_include_dash_manifest,
         'encoding': opts.encoding,
         'exec_cmd': opts.exec_cmd,
+        'extract_flat': opts.extract_flat,
     }
 
     with YoutubeDL(ydl_opts) as ydl:
-        ydl.print_debug_header()
-        ydl.add_default_info_extractors()
-
         # PostProcessors
         # Add the metadata pp first, the other pps will copy it
         if opts.addmetadata:

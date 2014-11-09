@@ -8,9 +8,8 @@ import re
 import shutil
 import traceback
 
-from .utils import (
-    write_json_file,
-)
+from .compat import compat_expanduser
+from .utils import write_json_file
 
 
 class Cache(object):
@@ -22,7 +21,7 @@ class Cache(object):
         if res is None:
             cache_root = os.environ.get('XDG_CACHE_HOME', '~/.cache')
             res = os.path.join(cache_root, 'youtube-dl')
-        return os.path.expanduser(res)
+        return compat_expanduser(res)
 
     def _get_cache_fn(self, section, key, dtype):
         assert re.match(r'^[a-zA-Z0-9_.-]+$', section), \

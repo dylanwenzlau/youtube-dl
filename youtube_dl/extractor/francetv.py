@@ -46,7 +46,7 @@ class FranceTVBaseInfoExtractor(InfoExtractor):
                         f4m_format['preference'] = 1
                     formats.extend(f4m_formats)
             elif video_url.endswith('.m3u8'):
-                formats.extend(self._extract_m3u8_formats(video_url, video_id))
+                formats.extend(self._extract_m3u8_formats(video_url, video_id, 'mp4'))
             elif video_url.startswith('rtmp'):
                 formats.append({
                     'url': video_url,
@@ -58,7 +58,7 @@ class FranceTVBaseInfoExtractor(InfoExtractor):
                 formats.append({
                     'url': video_url,
                     'format_id': format_id,
-                    'preference': 2,
+                    'preference': -1,
                 })
         self._sort_formats(formats)
 
@@ -93,7 +93,6 @@ class FranceTvInfoIE(FranceTVBaseInfoExtractor):
 
     _TESTS = [{
         'url': 'http://www.francetvinfo.fr/replay-jt/france-3/soir-3/jt-grand-soir-3-lundi-26-aout-2013_393427.html',
-        'md5': '9cecf35f99c4079c199e9817882a9a1c',
         'info_dict': {
             'id': '84981923',
             'ext': 'flv',

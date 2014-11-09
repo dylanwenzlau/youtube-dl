@@ -69,6 +69,8 @@ which means you can modify it, redistribute it or use it however you like.
                                      configuration in ~/.config/youtube-dl.conf
                                      (%APPDATA%/youtube-dl/config.txt on
                                      Windows)
+    --flat-playlist                  Do not extract the videos of a playlist,
+                                     only list them.
 
 ## Video Selection:
     --playlist-start NUMBER          playlist video to start at (default is 1)
@@ -99,8 +101,6 @@ which means you can modify it, redistribute it or use it however you like.
                                      downloaded videos in it.
     --include-ads                    Download advertisements as well
                                      (experimental)
-    --youtube-include-dash-manifest  Try to download the DASH manifest on
-                                     YouTube videos (experimental)
 
 ## Download Options:
     -r, --rate-limit LIMIT           maximum download rate in bytes per second
@@ -158,7 +158,8 @@ which means you can modify it, redistribute it or use it however you like.
                                      downloads if possible.
     --no-continue                    do not resume partially downloaded files
                                      (restart from beginning)
-    --no-part                        do not use .part files
+    --no-part                        do not use .part files - write directly
+                                     into output file
     --no-mtime                       do not use the Last-modified header to set
                                      the file modification time
     --write-description              write video description to a .description
@@ -199,6 +200,10 @@ which means you can modify it, redistribute it or use it however you like.
     -j, --dump-json                  simulate, quiet but print JSON information.
                                      See --output for a description of available
                                      keys.
+    -J, --dump-single-json           simulate, quiet but print JSON information
+                                     for each command-line argument. If the URL
+                                     refers to a playlist, dump the whole
+                                     playlist information in a single line.
     --newline                        output progress bar as new lines
     --no-progress                    do not print progress bar
     --console-title                  display progress in console titlebar
@@ -217,7 +222,7 @@ which means you can modify it, redistribute it or use it however you like.
                                      information about the video. (Currently
                                      supported only for YouTube)
     --user-agent UA                  specify a custom user agent
-    --referer REF                    specify a custom referer, use if the video
+    --referer URL                    specify a custom referer, use if the video
                                      access is restricted to one domain
     --add-header FIELD:VALUE         specify a custom HTTP header and its value,
                                      separated by a colon ':'. You can use this
@@ -242,6 +247,8 @@ which means you can modify it, redistribute it or use it however you like.
                                      one is requested
     --max-quality FORMAT             highest quality format to download
     -F, --list-formats               list all available formats
+    --youtube-skip-dash-manifest     Do not download the DASH manifest on
+                                     YouTube videos
 
 ## Subtitle Options:
     --write-sub                      write subtitle file
@@ -257,7 +264,7 @@ which means you can modify it, redistribute it or use it however you like.
                                      language tags like 'en,pt'
 
 ## Authentication Options:
-    -u, --username USERNAME          account username
+    -u, --username USERNAME          login with this account ID
     -p, --password PASSWORD          account password
     -2, --twofactor TWOFACTOR        two-factor auth code
     -n, --netrc                      use .netrc authentication data
@@ -268,7 +275,7 @@ which means you can modify it, redistribute it or use it however you like.
                                      (requires ffmpeg or avconv and ffprobe or
                                      avprobe)
     --audio-format FORMAT            "best", "aac", "vorbis", "mp3", "m4a",
-                                     "opus", or "wav"; best by default
+                                     "opus", or "wav"; "best" by default
     --audio-quality QUALITY          ffmpeg/avconv audio quality specification,
                                      insert a value between 0 (better) and 9
                                      (worse) for VBR or a specific bitrate like
@@ -349,20 +356,33 @@ $ youtube-dl --dateafter 20000101 --datebefore 20091231
 
 # FAQ
 
-### I'm getting an error `Unable to extract OpenGraph title` on YouTube playlists
+### How do I update youtube-dl?
 
-YouTube changed their playlist format in March 2014 and later on, so you'll need at least youtube-dl 2014.07.25 to download all YouTube videos.
+If you've followed [our manual installation instructions](http://rg3.github.io/youtube-dl/download.html), you can simply run `youtube-dl -U` (or, on Linux, `sudo youtube-dl -U`).
 
-If you have installed youtube-dl with a package manager, pip, setup.py or a tarball, please use that to update. Note that Ubuntu packages do not seem to get updated anymore. Since we are not affiliated with Ubuntu, there is little we can do. Feel free to report bugs to the Ubuntu packaging guys - all they have to do is update the package to a somewhat recent version.
+If you have used pip, a simple `sudo pip install -U youtube-dl` is sufficient to update.
 
-Alternatively, uninstall the youtube-dl package and follow [our manual installation instructions](http://rg3.github.io/youtube-dl/download.html). In a pinch, this should do if you used `apt-get` before to install youtube-dl:
+If you have installed youtube-dl using a package manager like *apt-get* or *yum*, use the standard system update mechanism to update. Note that distribution packages are often outdated. As a rule of thumb, youtube-dl releases at least once a month, and often weekly or even daily. Simply go to http://yt-dl.org/ to find out the current version. Unfortunately, there is nothing we youtube-dl developers can do if your distributions serves a really outdated version. You can (and should) complain to your distribution in their bugtracker or support forum.
+
+As a last resort, you can also uninstall the version installed by your package manager and follow our manual installation instructions. For that, remove the distribution's package, with a line like
+
+    sudo apt-get remove -y youtube-dl
+
+Afterwards, simply follow [our manual installation instructions](http://rg3.github.io/youtube-dl/download.html):
 
 ```
-sudo apt-get remove -y youtube-dl
 sudo wget https://yt-dl.org/latest/youtube-dl -O /usr/local/bin/youtube-dl
 sudo chmod a+x /usr/local/bin/youtube-dl
 hash -r
 ```
+
+Again, from then on you'll be able to update with `sudo youtube-dl -U`.
+
+### I'm getting an error `Unable to extract OpenGraph title` on YouTube playlists
+
+YouTube changed their playlist format in March 2014 and later on, so you'll need at least youtube-dl 2014.07.25 to download all YouTube videos.
+
+If you have installed youtube-dl with a package manager, pip, setup.py or a tarball, please use that to update. Note that Ubuntu packages do not seem to get updated anymore. Since we are not affiliated with Ubuntu, there is little we can do. Feel free to [report bugs](https://bugs.launchpad.net/ubuntu/+source/youtube-dl/+filebug) to the [Ubuntu packaging guys](mailto:ubuntu-motu@lists.ubuntu.com?subject=outdated%20version%20of%20youtube-dl) - all they have to do is update the package to a somewhat recent version. See above for a way to update.
 
 ### Do I always have to pass in `--max-quality FORMAT`, or `-citw`?
 
@@ -443,8 +463,6 @@ If you want to add support for a new site, you can follow this quick list (assum
     # coding: utf-8
     from __future__ import unicode_literals
 
-    import re
-
     from .common import InfoExtractor
 
 
@@ -452,7 +470,7 @@ If you want to add support for a new site, you can follow this quick list (assum
         _VALID_URL = r'https?://(?:www\.)?yourextractor\.com/watch/(?P<id>[0-9]+)'
         _TEST = {
             'url': 'http://yourextractor.com/watch/42',
-            'md5': 'TODO: md5 sum of the first 10KiB of the video file',
+            'md5': 'TODO: md5 sum of the first 10241 bytes of the video file (use --test)',
             'info_dict': {
                 'id': '42',
                 'ext': 'mp4',
@@ -467,8 +485,7 @@ If you want to add support for a new site, you can follow this quick list (assum
         }
 
         def _real_extract(self, url):
-            mobj = re.match(self._VALID_URL, url)
-            video_id = mobj.group('id')
+            video_id = self._match_id(url)
 
             # TODO more code goes here, for example ...
             webpage = self._download_webpage(url, video_id)
@@ -494,6 +511,20 @@ If you want to add support for a new site, you can follow this quick list (assum
 10. Finally, [create a pull request](https://help.github.com/articles/creating-a-pull-request). We'll then review and merge it.
 
 In any case, thank you very much for your contributions!
+
+# EMBEDDING YOUTUBE-DL
+
+youtube-dl makes the best effort to be a good command-line program, and thus should be callable from any programming language. If you encounter any problems parsing its output, feel free to [create a report](https://github.com/rg3/youtube-dl/issues/new).
+
+From a Python program, you can embed youtube-dl in a more powerful fashion, like this:
+
+    import youtube_dl
+
+    ydl_opts = {}
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        ydl.download(['http://www.youtube.com/watch?v=BaW_jenozKc'])
+
+Most likely, you'll want to use various options. For a list of what can be done, have a look at [youtube_dl/YoutubeDL.py](https://github.com/rg3/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L69). For a start, if you want to intercept youtube-dl's output, set a `logger` object.
 
 # BUGS
 

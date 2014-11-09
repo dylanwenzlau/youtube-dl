@@ -9,7 +9,7 @@ import xml.etree.ElementTree
 
 from hashlib import sha1
 from math import pow, sqrt, floor
-from .common import InfoExtractor
+from .subtitles import SubtitlesInfoExtractor
 from ..utils import (
     ExtractorError,
     compat_urllib_parse,
@@ -17,16 +17,16 @@ from ..utils import (
     bytes_to_intlist,
     intlist_to_bytes,
     unified_strdate,
-    clean_html,
     urlencode_postdata,
 )
 from ..aes import (
     aes_cbc_decrypt,
     inc,
 )
+from .common import InfoExtractor
 
 
-class CrunchyrollIE(InfoExtractor):
+class CrunchyrollIE(SubtitlesInfoExtractor):
     _VALID_URL = r'https?://(?:(?P<prefix>www|m)\.)?(?P<url>crunchyroll\.com/(?:[^/]*/[^/?&]*?|media/\?id=)(?P<video_id>[0-9]+))(?:[/?&]|$)'
     _TEST = {
         'url': 'http://www.crunchyroll.com/wanna-be-the-strongest-in-the-world/episode-1-an-idol-wrestler-is-born-645513',
@@ -39,6 +39,7 @@ class CrunchyrollIE(InfoExtractor):
             'thumbnail': 'http://img1.ak.crunchyroll.com/i/spire1-tmb/20c6b5e10f1a47b10516877d3c039cae1380951166_full.jpg',
             'uploader': 'Yomiuri Telecasting Corporation (YTV)',
             'upload_date': '20131013',
+            'url': 're:(?!.*&amp)',
         },
         'params': {
             # rtmp
@@ -107,19 +108,17 @@ class CrunchyrollIE(InfoExtractor):
         decrypted_data = intlist_to_bytes(aes_cbc_decrypt(data, key, iv))
         return zlib.decompress(decrypted_data)
 
-    def _convert_subtitles_to_srt(self, subtitles):
+    def _convert_subtitles_to_srt(self, sub_root):
         output = ''
-        for i, (start, end, text) in enumerate(re.findall(r'<event [^>]*?start="([^"]+)" [^>]*?end="([^"]+)" [^>]*?text="([^"]+)"[^>]*?>', subtitles), 1):
-            start = start.replace('.', ',')
-            end = end.replace('.', ',')
-            text = clean_html(text)
-            text = text.replace('\\N', '\n')
-            if not text:
-                continue
+
+        for i, event in enumerate(sub_root.findall('./events/event'), 1):
+            start = event.attrib['start'].replace('.', ',')
+            end = event.attrib['end'].replace('.', ',')
+            text = event.attrib['text'].replace('\\N', '\n')
             output += '%d\n%s --> %s\n%s\n\n' % (i, start, end, text)
         return output
 
-    def _convert_subtitles_to_ass(self, subtitles):
+    def _convert_subtitles_to_ass(self, sub_root):
         output = ''
 
         def ass_bool(strvalue):
@@ -127,10 +126,6 @@ class CrunchyrollIE(InfoExtractor):
             if strvalue == '1':
                 assvalue = '-1'
             return assvalue
-
-        sub_root = xml.etree.ElementTree.fromstring(subtitles)
-        if not sub_root:
-            return output
 
         output = '[Script Info]\n'
         output += 'Title: %s\n' % sub_root.attrib["title"]
@@ -237,12 +232,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             streamdata_req.data = 'req=RpcApiVideoEncode%5FGetStreamInfo&video%5Fencode%5Fquality='+stream_quality+'&media%5Fid='+stream_id+'&video%5Fformat='+stream_format
             streamdata_req.add_header('Content-Type', 'application/x-www-form-urlencoded')
             streamdata_req.add_header('Content-Length', str(len(streamdata_req.data)))
-            streamdata = self._download_webpage(streamdata_req, video_id, note='Downloading media info for '+video_format)
-            video_url = self._search_regex(r'<host>([^<]+)', streamdata, 'video_url')
-            video_play_path = self._search_regex(r'<file>([^<]+)', streamdata, 'video_play_path')
+            streamdata = self._download_xml(
+                streamdata_req, video_id,
+                note='Downloading media info for %s' % video_format)
+            video_url = streamdata.find('.//host').text
+            video_play_path = streamdata.find('.//file').text
             formats.append({
                 'url': video_url,
-                'play_path':   video_play_path,
+                'play_path': video_play_path,
                 'ext': 'flv',
                 'format': video_format,
                 'format_id': video_format,
@@ -266,10 +263,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             lang_code = self._search_regex(r'lang_code=["\']([^"\']+)', subtitle, 'subtitle_lang_code', fatal=False)
             if not lang_code:
                 continue
+            sub_root = xml.etree.ElementTree.fromstring(subtitle)
+            if not sub_root:
+                subtitles[lang_code] = ''
             if sub_format == 'ass':
-                subtitles[lang_code] = self._convert_subtitles_to_ass(subtitle)
+                subtitles[lang_code] = self._convert_subtitles_to_ass(sub_root)
             else:
-                subtitles[lang_code] = self._convert_subtitles_to_srt(subtitle)
+                subtitles[lang_code] = self._convert_subtitles_to_srt(sub_root)
+
+        if self._downloader.params.get('listsubtitles', False):
+            self._list_available_subtitles(video_id, subtitles)
+            return
 
         return {
             'id':          video_id,
@@ -280,4 +284,41 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             'upload_date': video_upload_date,
             'subtitles':   subtitles,
             'formats':     formats,
+        }
+
+
+class CrunchyrollShowPlaylistIE(InfoExtractor):
+    IE_NAME = "crunchyroll:playlist"
+    _VALID_URL = r'https?://(?:(?P<prefix>www|m)\.)?(?P<url>crunchyroll\.com/(?!(?:news|anime-news|library|forum|launchcalendar|lineup|store|comics|freetrial|login))(?P<id>[\w\-]+))/?$'
+
+    _TESTS = [{
+        'url': 'http://www.crunchyroll.com/a-bridge-to-the-starry-skies-hoshizora-e-kakaru-hashi',
+        'info_dict': {
+            'id': 'a-bridge-to-the-starry-skies-hoshizora-e-kakaru-hashi',
+            'title': 'A Bridge to the Starry Skies - Hoshizora e Kakaru Hashi'
+        },
+        'playlist_count': 13,
+    }]
+
+    def _real_extract(self, url):
+        show_id = self._match_id(url)
+
+        webpage = self._download_webpage(url, show_id)
+        title = self._html_search_regex(
+            r'(?s)<h1[^>]*>\s*<span itemprop="name">(.*?)</span>',
+            webpage, 'title')
+        episode_paths = re.findall(
+            r'(?s)<li id="showview_videos_media_[0-9]+"[^>]+>.*?<a href="([^"]+)"',
+            webpage)
+        entries = [
+            self.url_result('http://www.crunchyroll.com' + ep, 'Crunchyroll')
+            for ep in episode_paths
+        ]
+        entries.reverse()
+
+        return {
+            '_type': 'playlist',
+            'id': show_id,
+            'title': title,
+            'entries': entries,
         }
