@@ -16,6 +16,7 @@ import json
 import xml.etree.ElementTree
 
 from youtube_dl.utils import (
+    clean_html,
     DateRange,
     encodeFilename,
     find_xpath_attr,
@@ -44,7 +45,10 @@ from youtube_dl.utils import (
     escape_rfc3986,
     escape_url,
     js_to_json,
-    get_filesystem_encoding,
+    intlist_to_bytes,
+    args_to_str,
+    parse_filesize,
+    version_tuple,
 )
 
 
@@ -117,16 +121,16 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(orderedSet([1, 1, 2, 3, 4, 4, 5, 6, 7, 3, 5]), [1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(orderedSet([]), [])
         self.assertEqual(orderedSet([1]), [1])
-        #keep the list ordered
+        # keep the list ordered
         self.assertEqual(orderedSet([135, 1, 1, 1]), [135, 1])
 
     def test_unescape_html(self):
         self.assertEqual(unescapeHTML('%20;'), '%20;')
         self.assertEqual(
             unescapeHTML('&eacute;'), 'é')
-        
+
     def test_daterange(self):
-        _20century = DateRange("19000101","20000101")
+        _20century = DateRange("19000101", "20000101")
         self.assertFalse("17890714" in _20century)
         _ac = DateRange("00010101")
         self.assertTrue("19690721" in _ac)
@@ -168,7 +172,7 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(find('media:song/url').text, 'http://server.com/download.mp3')
 
     def test_smuggle_url(self):
-        data = {u"ö": u"ö", u"abc": [3]}
+        data = {"ö": "ö", "abc": [3]}
         url = 'https://foo.bar/baz?x=y#a'
         smug_url = smuggle_url(url, data)
         unsmug_url, unsmug_data = unsmuggle_url(smug_url)
@@ -216,6 +220,10 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(parse_duration('0m0s'), 0)
         self.assertEqual(parse_duration('0s'), 0)
         self.assertEqual(parse_duration('01:02:03.05'), 3723.05)
+        self.assertEqual(parse_duration('T30M38S'), 1838)
+        self.assertEqual(parse_duration('5 s'), 5)
+        self.assertEqual(parse_duration('3 min'), 180)
+        self.assertEqual(parse_duration('2.5 hours'), 9000)
 
     def test_fix_xml_ampersands(self):
         self.assertEqual(
@@ -282,6 +290,10 @@ class TestUtil(unittest.TestCase):
         d = json.loads(stripped)
         self.assertEqual(d, [{"id": "532cb", "x": 3}])
 
+        stripped = strip_jsonp('parseMetadata({"STATUS":"OK"})\n\n\n//epc')
+        d = json.loads(stripped)
+        self.assertEqual(d, {'STATUS': 'OK'})
+
     def test_uppercase_escape(self):
         self.assertEqual(uppercase_escape('aä'), 'aä')
         self.assertEqual(uppercase_escape('\\U0001d550'), '𝕐')
@@ -344,6 +356,36 @@ class TestUtil(unittest.TestCase):
 
         on = js_to_json('{"abc": true}')
         self.assertEqual(json.loads(on), {'abc': True})
+
+    def test_clean_html(self):
+        self.assertEqual(clean_html('a:\nb'), 'a: b')
+        self.assertEqual(clean_html('a:\n   "b"'), 'a:    "b"')
+
+    def test_intlist_to_bytes(self):
+        self.assertEqual(
+            intlist_to_bytes([0, 1, 127, 128, 255]),
+            b'\x00\x01\x7f\x80\xff')
+
+    def test_args_to_str(self):
+        self.assertEqual(
+            args_to_str(['foo', 'ba/r', '-baz', '2 be', '']),
+            'foo ba/r -baz \'2 be\' \'\''
+        )
+
+    def test_parse_filesize(self):
+        self.assertEqual(parse_filesize(None), None)
+        self.assertEqual(parse_filesize(''), None)
+        self.assertEqual(parse_filesize('91 B'), 91)
+        self.assertEqual(parse_filesize('foobar'), None)
+        self.assertEqual(parse_filesize('2 MiB'), 2097152)
+        self.assertEqual(parse_filesize('5 GB'), 5000000000)
+        self.assertEqual(parse_filesize('1.2Tb'), 1200000000000)
+        self.assertEqual(parse_filesize('1,24 KB'), 1240)
+
+    def test_version_tuple(self):
+        self.assertEqual(version_tuple('1'), (1,))
+        self.assertEqual(version_tuple('10.23.344'), (10, 23, 344))
+        self.assertEqual(version_tuple('10.1-6'), (10, 1, 6))  # avconv style
 
 if __name__ == '__main__':
     unittest.main()
