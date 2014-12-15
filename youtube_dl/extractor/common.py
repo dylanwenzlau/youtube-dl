@@ -118,6 +118,7 @@ class InfoExtractor(object):
 
     The following fields are optional:
 
+    alt_title:      A secondary title of the video.
     display_id      An alternative identifier for the video, not necessarily
                     unique, but available before title. Typically, id is
                     something like "4234987", title "Dancing naked mole rats",
@@ -129,7 +130,7 @@ class InfoExtractor(object):
                         * "resolution" (optional, string "{width}x{height"},
                                         deprecated)
     thumbnail:      Full URL to a video thumbnail image.
-    description:    One-line video description.
+    description:    Full video description.
     uploader:       Full name of the video uploader.
     timestamp:      UNIX timestamp of the moment the video became available.
     upload_date:    Video upload date (YYYYMMDD).
@@ -174,9 +175,10 @@ class InfoExtractor(object):
     _type "url" indicates that the video must be extracted from another
     location, possibly by a different extractor. Its only required key is:
     "url" - the next URL to extract.
-
-    Additionally, it may have properties believed to be identical to the
-    resolved entity, for example "title" if the title of the referred video is
+    The key "ie_key" can be set to the class name (minus the trailing "IE",
+    e.g. "Youtube") if the extractor class is known in advance.
+    Additionally, the dictionary may have any properties of the resolved entity
+    known in advance, for example "title" if the title of the referred video is
     known ahead of time.
 
 
@@ -390,6 +392,10 @@ class InfoExtractor(object):
             url_or_request, video_id, note, errnote, fatal=fatal)
         if (not fatal) and json_string is False:
             return None
+        return self._parse_json(
+            json_string, video_id, transform_source=transform_source, fatal=fatal)
+
+    def _parse_json(self, json_string, video_id, transform_source=None, fatal=True):
         if transform_source:
             json_string = transform_source(json_string)
         try:
@@ -790,6 +796,49 @@ class InfoExtractor(object):
                 formats.append(f)
                 last_info = {}
         self._sort_formats(formats)
+        return formats
+
+    # TODO: improve extraction
+    def _extract_smil_formats(self, smil_url, video_id):
+        smil = self._download_xml(
+            smil_url, video_id, 'Downloading SMIL file',
+            'Unable to download SMIL file')
+
+        base = smil.find('./head/meta').get('base')
+
+        formats = []
+        rtmp_count = 0
+        for video in smil.findall('./body/switch/video'):
+            src = video.get('src')
+            if not src:
+                continue
+            bitrate = int_or_none(video.get('system-bitrate') or video.get('systemBitrate'), 1000)
+            width = int_or_none(video.get('width'))
+            height = int_or_none(video.get('height'))
+            proto = video.get('proto')
+            if not proto:
+                if base:
+                    if base.startswith('rtmp'):
+                        proto = 'rtmp'
+                    elif base.startswith('http'):
+                        proto = 'http'
+            ext = video.get('ext')
+            if proto == 'm3u8':
+                formats.extend(self._extract_m3u8_formats(src, video_id, ext))
+            elif proto == 'rtmp':
+                rtmp_count += 1
+                streamer = video.get('streamer') or base
+                formats.append({
+                    'url': streamer,
+                    'play_path': src,
+                    'ext': 'flv',
+                    'format_id': 'rtmp-%d' % (rtmp_count if bitrate is None else bitrate),
+                    'tbr': bitrate,
+                    'width': width,
+                    'height': height,
+                })
+        self._sort_formats(formats)
+
         return formats
 
     def _live_title(self, name):

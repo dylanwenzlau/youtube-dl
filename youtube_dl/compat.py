@@ -247,7 +247,7 @@ else:
                 userhome = compat_getenv('HOME')
             elif 'USERPROFILE' in os.environ:
                 userhome = compat_getenv('USERPROFILE')
-            elif not 'HOMEPATH' in os.environ:
+            elif 'HOMEPATH' not in os.environ:
                 return path
             else:
                 try:
@@ -297,7 +297,9 @@ else:
 
 # Old 2.6 and 2.7 releases require kwargs to be bytes
 try:
-    (lambda x: x)(**{'x': 0})
+    def _testfunc(x):
+        pass
+    _testfunc(**{'x': 0})
 except TypeError:
     def compat_kwargs(kwargs):
         return dict((bytes(k), v) for k, v in kwargs.items())

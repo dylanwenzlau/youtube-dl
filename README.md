@@ -113,12 +113,12 @@ which means you can modify it, redistribute it or use it however you like.
                                      size. By default, the buffer size is
                                      automatically resized from an initial value
                                      of SIZE.
+    --playlist-reverse               Download playlist videos in reverse order
 
 ## Filesystem Options:
     -a, --batch-file FILE            file containing URLs to download ('-' for
                                      stdin)
     --id                             use only video ID in file name
-    -A, --auto-number                number downloaded files starting from 00000
     -o, --output TEMPLATE            output filename template. Use %(title)s to
                                      get the title, %(uploader)s for the
                                      uploader name, %(uploader_id)s for the
@@ -152,6 +152,9 @@ which means you can modify it, redistribute it or use it however you like.
     --restrict-filenames             Restrict filenames to only ASCII
                                      characters, and avoid "&" and spaces in
                                      filenames
+    -A, --auto-number                [deprecated; use  -o
+                                     "%(autonumber)s-%(title)s.%(ext)s" ] number
+                                     downloaded files starting from 00000
     -t, --title                      [deprecated] use title in file name
                                      (default)
     -l, --literal                    [deprecated] alias of --title
@@ -527,23 +530,59 @@ youtube-dl makes the best effort to be a good command-line program, and thus sho
 
 From a Python program, you can embed youtube-dl in a more powerful fashion, like this:
 
-    import youtube_dl
+```python
+import youtube_dl
 
-    ydl_opts = {}
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        ydl.download(['http://www.youtube.com/watch?v=BaW_jenozKc'])
+ydl_opts = {}
+with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+    ydl.download(['http://www.youtube.com/watch?v=BaW_jenozKc'])
+```
 
 Most likely, you'll want to use various options. For a list of what can be done, have a look at [youtube_dl/YoutubeDL.py](https://github.com/rg3/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L69). For a start, if you want to intercept youtube-dl's output, set a `logger` object.
 
+Here's a more complete example of a program that outputs only errors (and a short message after the download is finished), and downloads/converts the video to an mp3 file:
+
+```python
+import youtube_dl
+
+
+class MyLogger(object):
+    def debug(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        print(msg)
+
+
+def my_hook(d):
+    if d['status'] == 'finished':
+        print('Done downloading, now converting ...')
+
+
+ydl_opts = {
+    'format': 'bestaudio/best',
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }],
+    'logger': MyLogger(),
+    'progress_hooks': [my_hook],
+}
+with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+    ydl.download(['http://www.youtube.com/watch?v=BaW_jenozKc'])
+```
+
 # BUGS
 
-Bugs and suggestions should be reported at: <https://github.com/rg3/youtube-dl/issues> . Unless you were prompted so or there is another pertinent reason (e.g. GitHub fails to accept the bug report), please do not send bug reports via personal email.
+Bugs and suggestions should be reported at: <https://github.com/rg3/youtube-dl/issues> . Unless you were prompted so or there is another pertinent reason (e.g. GitHub fails to accept the bug report), please do not send bug reports via personal email. For discussions, join us in the irc channel #youtube-dl on freenode.
 
 Please include the full output of the command when run with `--verbose`. The output (including the first lines) contain important debugging information. Issues without the full output are often not reproducible and therefore do not get solved in short order, if ever.
 
-For discussions, join us in the irc channel #youtube-dl on freenode.
-
-When you submit a request, please re-read it once to avoid a couple of mistakes (you can and should use this as a checklist):
+Please re-read your issue once again to avoid a couple of common mistakes (you can and should use this as a checklist):
 
 ### Is the description of the issue itself sufficient?
 
