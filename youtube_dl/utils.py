@@ -10,12 +10,14 @@ import ctypes
 import datetime
 import email.utils
 import errno
+import functools
 import gzip
 import itertools
 import io
 import json
 import locale
 import math
+import operator
 import os
 import pipes
 import platform
@@ -31,10 +33,13 @@ import xml.etree.ElementTree
 import zlib
 
 from .compat import (
+    compat_basestring,
     compat_chr,
-    compat_getenv,
     compat_html_entities,
+    compat_http_client,
+    compat_kwargs,
     compat_parse_qs,
+    compat_socket_create_connection,
     compat_str,
     compat_urllib_error,
     compat_urllib_parse,
@@ -49,12 +54,19 @@ from .compat import (
 compiled_regex_type = type(re.compile(''))
 
 std_headers = {
-    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0) Gecko/20100101 Firefox/10.0 (Chrome)',
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0) Gecko/20150101 Firefox/20.0 (Chrome)',
     'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate',
     'Accept-Language': 'en-us,en;q=0.5',
 }
+
+
+NO_DEFAULT = object()
+
+ENGLISH_MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December']
 
 
 def preferredencoding():
@@ -66,7 +78,7 @@ def preferredencoding():
     try:
         pref = locale.getpreferredencoding()
         'TEST'.encode(pref)
-    except:
+    except Exception:
         pref = 'UTF-8'
 
     return pref
@@ -105,7 +117,7 @@ def write_json_file(obj, fn):
             'encoding': 'utf-8',
         })
 
-    tf = tempfile.NamedTemporaryFile(**args)
+    tf = tempfile.NamedTemporaryFile(**compat_kwargs(args))
 
     try:
         with tf:
@@ -118,7 +130,7 @@ def write_json_file(obj, fn):
             except OSError:
                 pass
         os.rename(tf.name, fn)
-    except:
+    except Exception:
         try:
             os.remove(tf.name)
         except OSError:
@@ -127,21 +139,24 @@ def write_json_file(obj, fn):
 
 
 if sys.version_info >= (2, 7):
-    def find_xpath_attr(node, xpath, key, val):
+    def find_xpath_attr(node, xpath, key, val=None):
         """ Find the xpath xpath[@key=val] """
         assert re.match(r'^[a-zA-Z-]+$', key)
-        assert re.match(r'^[a-zA-Z0-9@\s:._-]*$', val)
-        expr = xpath + "[@%s='%s']" % (key, val)
+        if val:
+            assert re.match(r'^[a-zA-Z0-9@\s:._-]*$', val)
+        expr = xpath + ('[@%s]' % key if val is None else "[@%s='%s']" % (key, val))
         return node.find(expr)
 else:
-    def find_xpath_attr(node, xpath, key, val):
+    def find_xpath_attr(node, xpath, key, val=None):
         # Here comes the crazy part: In 2.6, if the xpath is a unicode,
         # .//node does not match if a node is a direct child of . !
-        if isinstance(xpath, unicode):
+        if isinstance(xpath, compat_str):
             xpath = xpath.encode('ascii')
 
         for f in node.findall(xpath):
-            if f.attrib.get(key) == val:
+            if key not in f.attrib:
+                continue
+            if val is None or f.attrib.get(key) == val:
                 return f
         return None
 
@@ -161,13 +176,15 @@ def xpath_with_ns(path, ns_map):
     return '/'.join(replaced)
 
 
-def xpath_text(node, xpath, name=None, fatal=False):
+def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
     if sys.version_info < (2, 7):  # Crazy 2.6
         xpath = xpath.encode('ascii')
 
     n = node.find(xpath)
     if n is None or n.text is None:
-        if fatal:
+        if default is not NO_DEFAULT:
+            return default
+        elif fatal:
             name = xpath if name is None else name
             raise ExtractorError('Could not find XML element %s' % name)
         else:
@@ -205,6 +222,10 @@ def get_element_by_attribute(attribute, value, html):
 
 def clean_html(html):
     """Clean an HTML snippet into a readable string"""
+
+    if html is None:  # Convenience for sanitizing descriptions etc.
+        return html
+
     # Newline vs <br />
     html = html.replace('\n', ' ')
     html = re.sub(r'\s*<\s*br\s*/?\s*>\s*', '\n', html)
@@ -239,15 +260,12 @@ def sanitize_open(filename, open_mode):
             raise
 
         # In case of error, try to remove win32 forbidden chars
-        alt_filename = os.path.join(
-            re.sub('[/<>:"\\|\\\\?\\*]', '#', path_part)
-            for path_part in os.path.split(filename)
-        )
+        alt_filename = sanitize_path(filename)
         if alt_filename == filename:
             raise
         else:
             # An exception here should be caught in the caller
-            stream = open(encodeFilename(filename), open_mode)
+            stream = open(encodeFilename(alt_filename), open_mode)
             return (stream, alt_filename)
 
 
@@ -280,6 +298,8 @@ def sanitize_filename(s, restricted=False, is_id=False):
             return '_'
         return char
 
+    # Handle timestamps
+    s = re.sub(r'[0-9]+(?::[0-9]+)+', lambda m: m.group(0).replace(':', '_'), s)
     result = ''.join(map(replace_insane, s))
     if not is_id:
         while '__' in result:
@@ -288,9 +308,30 @@ def sanitize_filename(s, restricted=False, is_id=False):
         # Common case of "Foreign band name - English song title"
         if restricted and result.startswith('-_'):
             result = result[2:]
+        if result.startswith('-'):
+            result = '_' + result[len('-'):]
+        result = result.lstrip('.')
         if not result:
             result = '_'
     return result
+
+
+def sanitize_path(s):
+    """Sanitizes and normalizes path on Windows"""
+    if sys.platform != 'win32':
+        return s
+    drive_or_unc, _ = os.path.splitdrive(s)
+    if sys.version_info < (2, 7) and not drive_or_unc:
+        drive_or_unc, _ = os.path.splitunc(s)
+    norm_path = os.path.normpath(remove_start(s, drive_or_unc)).split(os.path.sep)
+    if drive_or_unc:
+        norm_path.pop(0)
+    sanitized_path = [
+        path_part if path_part in ['.', '..'] else re.sub('(?:[/<>:"\\|\\\\?\\*]|\.$)', '#', path_part)
+        for path_part in norm_path]
+    if drive_or_unc:
+        sanitized_path.insert(0, drive_or_unc + os.path.sep)
+    return os.path.join(*sanitized_path)
 
 
 def orderedSet(iterable):
@@ -308,7 +349,7 @@ def _htmlentity_transform(entity):
     if entity in compat_html_entities.name2codepoint:
         return compat_chr(compat_html_entities.name2codepoint[entity])
 
-    mobj = re.match(r'#(x?[0-9]+)', entity)
+    mobj = re.match(r'#(x[0-9a-fA-F]+|[0-9]+)', entity)
     if mobj is not None:
         numstr = mobj.group(1)
         if numstr.startswith('x'):
@@ -331,6 +372,18 @@ def unescapeHTML(s):
         r'&([^;]+);', lambda m: _htmlentity_transform(m.group(1)), s)
 
 
+def get_subprocess_encoding():
+    if sys.platform == 'win32' and sys.getwindowsversion()[0] >= 5:
+        # For subprocess calls, encode with locale encoding
+        # Refer to http://stackoverflow.com/a/9951851/35070
+        encoding = preferredencoding()
+    else:
+        encoding = sys.getfilesystemencoding()
+    if encoding is None:
+        encoding = 'utf-8'
+    return encoding
+
+
 def encodeFilename(s, for_subprocess=False):
     """
     @param s The name of the file
@@ -342,30 +395,37 @@ def encodeFilename(s, for_subprocess=False):
     if sys.version_info >= (3, 0):
         return s
 
-    if sys.platform == 'win32' and sys.getwindowsversion()[0] >= 5:
-        # Pass '' directly to use Unicode APIs on Windows 2000 and up
-        # (Detecting Windows NT 4 is tricky because 'major >= 4' would
-        # match Windows 9x series as well. Besides, NT 4 is obsolete.)
-        if not for_subprocess:
-            return s
-        else:
-            # For subprocess calls, encode with locale encoding
-            # Refer to http://stackoverflow.com/a/9951851/35070
-            encoding = preferredencoding()
-    else:
-        encoding = sys.getfilesystemencoding()
-    if encoding is None:
-        encoding = 'utf-8'
-    return s.encode(encoding, 'ignore')
+    # Pass '' directly to use Unicode APIs on Windows 2000 and up
+    # (Detecting Windows NT 4 is tricky because 'major >= 4' would
+    # match Windows 9x series as well. Besides, NT 4 is obsolete.)
+    if not for_subprocess and sys.platform == 'win32' and sys.getwindowsversion()[0] >= 5:
+        return s
+
+    return s.encode(get_subprocess_encoding(), 'ignore')
+
+
+def decodeFilename(b, for_subprocess=False):
+
+    if sys.version_info >= (3, 0):
+        return b
+
+    if not isinstance(b, bytes):
+        return b
+
+    return b.decode(get_subprocess_encoding(), 'ignore')
 
 
 def encodeArgument(s):
     if not isinstance(s, compat_str):
         # Legacy code that uses byte strings
         # Uncomment the following line after fixing all post processors
-        #assert False, 'Internal error: %r should be of type %r, is %r' % (s, compat_str, type(s))
+        # assert False, 'Internal error: %r should be of type %r, is %r' % (s, compat_str, type(s))
         s = s.decode('ascii')
     return encodeFilename(s, True)
+
+
+def decodeArgument(b):
+    return decodeFilename(b, True)
 
 
 def decodeOption(optval):
@@ -387,46 +447,40 @@ def formatSeconds(secs):
         return '%d' % secs
 
 
-def make_HTTPS_handler(opts_no_check_certificate, **kwargs):
+def make_HTTPS_handler(params, **kwargs):
+    opts_no_check_certificate = params.get('nocheckcertificate', False)
     if hasattr(ssl, 'create_default_context'):  # Python >= 3.4 or 2.7.9
-        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         if opts_no_check_certificate:
+            context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         try:
-            return compat_urllib_request.HTTPSHandler(context=context, **kwargs)
+            return YoutubeDLHTTPSHandler(params, context=context, **kwargs)
         except TypeError:
             # Python 2.7.8
             # (create_default_context present but HTTPSHandler has no context=)
             pass
 
     if sys.version_info < (3, 2):
-        import httplib
-
-        class HTTPSConnectionV3(httplib.HTTPSConnection):
-            def __init__(self, *args, **kwargs):
-                httplib.HTTPSConnection.__init__(self, *args, **kwargs)
-
-            def connect(self):
-                sock = socket.create_connection((self.host, self.port), self.timeout)
-                if getattr(self, '_tunnel_host', False):
-                    self.sock = sock
-                    self._tunnel()
-                try:
-                    self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_TLSv1)
-                except ssl.SSLError:
-                    self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_SSLv23)
-
-        class HTTPSHandlerV3(compat_urllib_request.HTTPSHandler):
-            def https_open(self, req):
-                return self.do_open(HTTPSConnectionV3, req)
-        return HTTPSHandlerV3(**kwargs)
+        return YoutubeDLHTTPSHandler(params, **kwargs)
     else:  # Python < 3.4
-        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
         context.verify_mode = (ssl.CERT_NONE
                                if opts_no_check_certificate
                                else ssl.CERT_REQUIRED)
         context.set_default_verify_paths()
-        return compat_urllib_request.HTTPSHandler(context=context, **kwargs)
+        return YoutubeDLHTTPSHandler(params, context=context, **kwargs)
+
+
+def bug_reports_message():
+    if ytdl_is_updateable():
+        update_cmd = 'type  youtube-dl -U  to update'
+    else:
+        update_cmd = 'see  https://yt-dl.org/update  on how to update'
+    msg = '; please report this issue on https://yt-dl.org/bug .'
+    msg += ' Make sure you are using the latest version; %s.' % update_cmd
+    msg += ' Be sure to call youtube-dl with the --verbose flag and include its complete output.'
+    return msg
 
 
 class ExtractorError(Exception):
@@ -444,13 +498,7 @@ class ExtractorError(Exception):
         if cause:
             msg += ' (caused by %r)' % cause
         if not expected:
-            if ytdl_is_updateable():
-                update_cmd = 'type  youtube-dl -U  to update'
-            else:
-                update_cmd = 'see  https://yt-dl.org/update  on how to update'
-            msg += '; please report this issue on https://yt-dl.org/bug .'
-            msg += ' Make sure you are using the latest version; %s.' % update_cmd
-            msg += ' Be sure to call youtube-dl with the --verbose flag and include its complete output.'
+            msg += bug_reports_message()
         super(ExtractorError, self).__init__(msg)
 
         self.traceback = tb
@@ -462,6 +510,13 @@ class ExtractorError(Exception):
         if self.traceback is None:
             return None
         return ''.join(traceback.format_tb(self.traceback))
+
+
+class UnsupportedError(ExtractorError):
+    def __init__(self, url):
+        super(UnsupportedError, self).__init__(
+            'Unsupported URL: %s' % url, expected=True)
+        self.url = url
 
 
 class RegexNotFoundError(ExtractorError):
@@ -524,13 +579,33 @@ class ContentTooShortError(Exception):
     download is too small for what the server announced first, indicating
     the connection was probably interrupted.
     """
-    # Both in bytes
-    downloaded = None
-    expected = None
 
     def __init__(self, downloaded, expected):
+        # Both in bytes
         self.downloaded = downloaded
         self.expected = expected
+
+
+def _create_http_connection(ydl_handler, http_class, is_https, *args, **kwargs):
+    hc = http_class(*args, **kwargs)
+    source_address = ydl_handler._params.get('source_address')
+    if source_address is not None:
+        sa = (source_address, 0)
+        if hasattr(hc, 'source_address'):  # Python 2.7+
+            hc.source_address = sa
+        else:  # Python 2.6
+            def _hc_connect(self, *args, **kwargs):
+                sock = compat_socket_create_connection(
+                    (self.host, self.port), self.timeout, sa)
+                if is_https:
+                    self.sock = ssl.wrap_socket(
+                        sock, self.key_file, self.cert_file,
+                        ssl_version=ssl.PROTOCOL_TLSv1)
+                else:
+                    self.sock = sock
+            hc.connect = functools.partial(_hc_connect, hc)
+
+    return hc
 
 
 class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
@@ -551,6 +626,15 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
     public domain.
     """
 
+    def __init__(self, params, *args, **kwargs):
+        compat_urllib_request.HTTPHandler.__init__(self, *args, **kwargs)
+        self._params = params
+
+    def http_open(self, req):
+        return self.do_open(functools.partial(
+            _create_http_connection, self, compat_http_client.HTTPConnection, False),
+            req)
+
     @staticmethod
     def deflate(data):
         try:
@@ -567,18 +651,35 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
         return ret
 
     def http_request(self, req):
+        # According to RFC 3986, URLs can not contain non-ASCII characters, however this is not
+        # always respected by websites, some tend to give out URLs with non percent-encoded
+        # non-ASCII characters (see telemb.py, ard.py [#3412])
+        # urllib chokes on URLs with non-ASCII characters (see http://bugs.python.org/issue3991)
+        # To work around aforementioned issue we will replace request's original URL with
+        # percent-encoded one
+        # Since redirects are also affected (e.g. http://www.southpark.de/alle-episoden/s18e09)
+        # the code of this workaround has been moved here from YoutubeDL.urlopen()
+        url = req.get_full_url()
+        url_escaped = escape_url(url)
+
+        # Substitute URL if any change after escaping
+        if url != url_escaped:
+            req_type = HEADRequest if req.get_method() == 'HEAD' else compat_urllib_request.Request
+            new_req = req_type(
+                url_escaped, data=req.data, headers=req.headers,
+                origin_req_host=req.origin_req_host, unverifiable=req.unverifiable)
+            new_req.timeout = req.timeout
+            req = new_req
+
         for h, v in std_headers.items():
-            if h not in req.headers:
+            # Capitalize is needed because of Python bug 2275: http://bugs.python.org/issue2275
+            # The dict keys are capitalized because of this bug by urllib
+            if h.capitalize() not in req.headers:
                 req.add_header(h, v)
         if 'Youtubedl-no-compression' in req.headers:
             if 'Accept-encoding' in req.headers:
                 del req.headers['Accept-encoding']
             del req.headers['Youtubedl-no-compression']
-        if 'Youtubedl-user-agent' in req.headers:
-            if 'User-agent' in req.headers:
-                del req.headers['User-agent']
-            req.headers['User-agent'] = req.headers['Youtubedl-user-agent']
-            del req.headers['Youtubedl-user-agent']
 
         if sys.version_info < (2, 7) and '#' in req.get_full_url():
             # Python 2.6 is brain-dead when it comes to fragments
@@ -614,32 +715,61 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
             gz = io.BytesIO(self.deflate(resp.read()))
             resp = self.addinfourl_wrapper(gz, old_resp.headers, old_resp.url, old_resp.code)
             resp.msg = old_resp.msg
+        # Percent-encode redirect URL of Location HTTP header to satisfy RFC 3986
+        if 300 <= resp.code < 400:
+            location = resp.headers.get('Location')
+            if location:
+                # As of RFC 2616 default charset is iso-8859-1 that is respected by python 3
+                if sys.version_info >= (3, 0):
+                    location = location.encode('iso-8859-1').decode('utf-8')
+                location_escaped = escape_url(location)
+                if location != location_escaped:
+                    del resp.headers['Location']
+                    resp.headers['Location'] = location_escaped
         return resp
 
     https_request = http_request
     https_response = http_response
 
 
-def parse_iso8601(date_str, delimiter='T'):
+class YoutubeDLHTTPSHandler(compat_urllib_request.HTTPSHandler):
+    def __init__(self, params, https_conn_class=None, *args, **kwargs):
+        compat_urllib_request.HTTPSHandler.__init__(self, *args, **kwargs)
+        self._https_conn_class = https_conn_class or compat_http_client.HTTPSConnection
+        self._params = params
+
+    def https_open(self, req):
+        kwargs = {}
+        if hasattr(self, '_context'):  # python > 2.6
+            kwargs['context'] = self._context
+        if hasattr(self, '_check_hostname'):  # python 3.x
+            kwargs['check_hostname'] = self._check_hostname
+        return self.do_open(functools.partial(
+            _create_http_connection, self, self._https_conn_class, True),
+            req, **kwargs)
+
+
+def parse_iso8601(date_str, delimiter='T', timezone=None):
     """ Return a UNIX timestamp from the given date """
 
     if date_str is None:
         return None
 
-    m = re.search(
-        r'(\.[0-9]+)?(?:Z$| ?(?P<sign>\+|-)(?P<hours>[0-9]{2}):?(?P<minutes>[0-9]{2})$)',
-        date_str)
-    if not m:
-        timezone = datetime.timedelta()
-    else:
-        date_str = date_str[:-len(m.group(0))]
-        if not m.group('sign'):
+    if timezone is None:
+        m = re.search(
+            r'(\.[0-9]+)?(?:Z$| ?(?P<sign>\+|-)(?P<hours>[0-9]{2}):?(?P<minutes>[0-9]{2})$)',
+            date_str)
+        if not m:
             timezone = datetime.timedelta()
         else:
-            sign = 1 if m.group('sign') == '+' else -1
-            timezone = datetime.timedelta(
-                hours=sign * int(m.group('hours')),
-                minutes=sign * int(m.group('minutes')))
+            date_str = date_str[:-len(m.group(0))]
+            if not m.group('sign'):
+                timezone = datetime.timedelta()
+            else:
+                sign = 1 if m.group('sign') == '+' else -1
+                timezone = datetime.timedelta(
+                    hours=sign * int(m.group('hours')),
+                    minutes=sign * int(m.group('minutes')))
     date_format = '%Y-%m-%d{0}%H:%M:%S'.format(delimiter)
     dt = datetime.datetime.strptime(date_str, date_format) - timezone
     return calendar.timegm(dt.timetuple())
@@ -654,9 +784,10 @@ def unified_strdate(date_str, day_first=True):
     # Replace commas
     date_str = date_str.replace(',', ' ')
     # %z (UTC offset) is only supported in python>=3.2
-    date_str = re.sub(r' ?(\+|-)[0-9]{2}:?[0-9]{2}$', '', date_str)
+    if not re.match(r'^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}$', date_str):
+        date_str = re.sub(r' ?(\+|-)[0-9]{2}:?[0-9]{2}$', '', date_str)
     # Remove AM/PM + timezone
-    date_str = re.sub(r'(?i)\s*(?:AM|PM)\s+[A-Z]+', '', date_str)
+    date_str = re.sub(r'(?i)\s*(?:AM|PM)(?:\s+[A-Z]+)?', '', date_str)
 
     format_expressions = [
         '%d %B %Y',
@@ -666,11 +797,9 @@ def unified_strdate(date_str, day_first=True):
         '%b %dst %Y %I:%M%p',
         '%b %dnd %Y %I:%M%p',
         '%b %dth %Y %I:%M%p',
+        '%Y %m %d',
         '%Y-%m-%d',
         '%Y/%m/%d',
-        '%d.%m.%Y',
-        '%d/%m/%Y',
-        '%d/%m/%y',
         '%Y/%m/%d %H:%M:%S',
         '%Y-%m-%d %H:%M:%S',
         '%Y-%m-%d %H:%M:%S.%f',
@@ -685,10 +814,18 @@ def unified_strdate(date_str, day_first=True):
     ]
     if day_first:
         format_expressions.extend([
+            '%d-%m-%Y',
+            '%d.%m.%Y',
+            '%d/%m/%Y',
+            '%d/%m/%y',
             '%d/%m/%Y %H:%M:%S',
         ])
     else:
         format_expressions.extend([
+            '%m-%d-%Y',
+            '%m.%d.%Y',
+            '%m/%d/%Y',
+            '%m/%d/%y',
             '%m/%d/%Y %H:%M:%S',
         ])
     for expression in format_expressions:
@@ -815,6 +952,9 @@ def _windows_write_string(s, out):
     except AttributeError:
         # If the output stream doesn't have a fileno, it's virtual
         return False
+    except io.UnsupportedOperation:
+        # Some strange Windows pseudo files?
+        return False
     if fileno not in WIN_OUTPUT_IDS:
         return False
 
@@ -841,8 +981,8 @@ def _windows_write_string(s, out):
     def not_a_console(handle):
         if handle == INVALID_HANDLE_VALUE or handle is None:
             return True
-        return ((GetFileType(handle) & ~FILE_TYPE_REMOTE) != FILE_TYPE_CHAR
-                or GetConsoleMode(handle, ctypes.byref(ctypes.wintypes.DWORD())) == 0)
+        return ((GetFileType(handle) & ~FILE_TYPE_REMOTE) != FILE_TYPE_CHAR or
+                GetConsoleMode(handle, ctypes.byref(ctypes.wintypes.DWORD())) == 0)
 
     if not_a_console(h):
         return False
@@ -1018,15 +1158,6 @@ def shell_quote(args):
     return ' '.join(quoted_args)
 
 
-def takewhile_inclusive(pred, seq):
-    """ Like itertools.takewhile, but include the latest evaluated element
-        (the first element so that Not pred(e)) """
-    for e in seq:
-        yield e
-        if not pred(e):
-            return
-
-
 def smuggle_url(url, data):
     """ Pass additional data in a URL for internal use. """
 
@@ -1112,30 +1243,21 @@ def parse_filesize(s):
     return int(float(num_str) * mult)
 
 
-def get_term_width():
-    columns = compat_getenv('COLUMNS', None)
-    if columns:
-        return int(columns)
-
-    try:
-        sp = subprocess.Popen(
-            ['stty', 'size'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = sp.communicate()
-        return int(out.split()[1])
-    except:
-        pass
-    return None
-
-
 def month_by_name(name):
     """ Return the number of a month by (locale-independently) English name """
 
-    ENGLISH_NAMES = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December']
     try:
-        return ENGLISH_NAMES.index(name) + 1
+        return ENGLISH_MONTH_NAMES.index(name) + 1
+    except ValueError:
+        return None
+
+
+def month_by_abbreviation(abbrev):
+    """ Return the number of a month by (locale-independently) English
+        abbreviations """
+
+    try:
+        return [s[:3] for s in ENGLISH_MONTH_NAMES].index(abbrev) + 1
     except ValueError:
         return None
 
@@ -1211,19 +1333,23 @@ def float_or_none(v, scale=1, invscale=1, default=None):
 
 
 def parse_duration(s):
-    if s is None:
+    if not isinstance(s, compat_basestring):
         return None
 
     s = s.strip()
 
     m = re.match(
-        r'''(?ix)T?
+        r'''(?ix)(?:P?T)?
         (?:
-            (?P<only_mins>[0-9.]+)\s*(?:mins?|minutes?)\s*|
+            (?P<only_mins>[0-9.]+)\s*(?:mins?\.?|minutes?)\s*|
             (?P<only_hours>[0-9.]+)\s*(?:hours?)|
 
+            \s*(?P<hours_reversed>[0-9]+)\s*(?:[:h]|hours?)\s*(?P<mins_reversed>[0-9]+)\s*(?:[:m]|mins?\.?|minutes?)\s*|
             (?:
-                (?:(?P<hours>[0-9]+)\s*(?:[:h]|hours?)\s*)?
+                (?:
+                    (?:(?P<days>[0-9]+)\s*(?:[:d]|days?)\s*)?
+                    (?P<hours>[0-9]+)\s*(?:[:h]|hours?)\s*
+                )?
                 (?P<mins>[0-9]+)\s*(?:[:m]|mins?|minutes?)\s*
             )?
             (?P<secs>[0-9]+)(?P<ms>\.[0-9]+)?\s*(?:s|secs?|seconds?)?
@@ -1237,18 +1363,34 @@ def parse_duration(s):
         return float_or_none(m.group('only_hours'), invscale=60 * 60)
     if m.group('secs'):
         res += int(m.group('secs'))
+    if m.group('mins_reversed'):
+        res += int(m.group('mins_reversed')) * 60
     if m.group('mins'):
         res += int(m.group('mins')) * 60
     if m.group('hours'):
         res += int(m.group('hours')) * 60 * 60
+    if m.group('hours_reversed'):
+        res += int(m.group('hours_reversed')) * 60 * 60
+    if m.group('days'):
+        res += int(m.group('days')) * 24 * 60 * 60
     if m.group('ms'):
         res += float(m.group('ms'))
     return res
 
 
-def prepend_extension(filename, ext):
+def prepend_extension(filename, ext, expected_real_ext=None):
     name, real_ext = os.path.splitext(filename)
-    return '{0}.{1}{2}'.format(name, ext, real_ext)
+    return (
+        '{0}.{1}{2}'.format(name, ext, real_ext)
+        if not expected_real_ext or real_ext[1:] == expected_real_ext
+        else '{0}.{1}'.format(filename, ext))
+
+
+def replace_extension(filename, ext, expected_real_ext=None):
+    name, real_ext = os.path.splitext(filename)
+    return '{0}.{1}'.format(
+        name if not expected_real_ext or real_ext[1:] == expected_real_ext else filename,
+        ext)
 
 
 def check_executable(exe, args=[]):
@@ -1267,7 +1409,7 @@ def get_exe_version(exe, args=['--version'],
     or False if the executable is not present """
     try:
         out, _ = subprocess.Popen(
-            [exe] + args,
+            [encodeArgument(exe)] + args,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT).communicate()
     except OSError:
         return False
@@ -1373,9 +1515,17 @@ def uppercase_escape(s):
         s)
 
 
+def lowercase_escape(s):
+    unicode_escape = codecs.getdecoder('unicode_escape')
+    return re.sub(
+        r'\\u[0-9a-fA-F]{4}',
+        lambda m: unicode_escape(m.group(0))[0],
+        s)
+
+
 def escape_rfc3986(s):
     """Escape non-ASCII characters as suggested by RFC 3986"""
-    if sys.version_info < (3, 0) and isinstance(s, unicode):
+    if sys.version_info < (3, 0) and isinstance(s, compat_str):
         s = s.encode('utf-8')
     return compat_urllib_parse.quote(s, b"%/;:@&=+$,!~*'()?#[]")
 
@@ -1489,11 +1639,11 @@ def js_to_json(code):
         return '"%s"' % v
 
     res = re.sub(r'''(?x)
-        "(?:[^"\\]*(?:\\\\|\\")?)*"|
-        '(?:[^'\\]*(?:\\\\|\\')?)*'|
-        [a-zA-Z_][a-zA-Z_0-9]*
+        "(?:[^"\\]*(?:\\\\|\\['"nu]))*[^"\\]*"|
+        '(?:[^'\\]*(?:\\\\|\\['"nu]))*[^'\\]*'|
+        [a-zA-Z_][.a-zA-Z_0-9]*
         ''', fix_kv, code)
-    res = re.sub(r',(\s*\])', lambda m: m.group(1), res)
+    res = re.sub(r',(\s*[\]}])', lambda m: m.group(1), res)
     return res
 
 
@@ -1543,3 +1693,709 @@ def ytdl_is_updateable():
 def args_to_str(args):
     # Get a short string representation for a subprocess command
     return ' '.join(shlex_quote(a) for a in args)
+
+
+def mimetype2ext(mt):
+    _, _, res = mt.rpartition('/')
+
+    return {
+        'x-ms-wmv': 'wmv',
+        'x-mp4-fragmented': 'mp4',
+        'ttml+xml': 'ttml',
+    }.get(res, res)
+
+
+def urlhandle_detect_ext(url_handle):
+    try:
+        url_handle.headers
+        getheader = lambda h: url_handle.headers[h]
+    except AttributeError:  # Python < 3
+        getheader = url_handle.info().getheader
+
+    cd = getheader('Content-Disposition')
+    if cd:
+        m = re.match(r'attachment;\s*filename="(?P<filename>[^"]+)"', cd)
+        if m:
+            e = determine_ext(m.group('filename'), default_ext=None)
+            if e:
+                return e
+
+    return mimetype2ext(getheader('Content-Type'))
+
+
+def age_restricted(content_limit, age_limit):
+    """ Returns True iff the content should be blocked """
+
+    if age_limit is None:  # No limit set
+        return False
+    if content_limit is None:
+        return False  # Content available for everyone
+    return age_limit < content_limit
+
+
+def is_html(first_bytes):
+    """ Detect whether a file contains HTML by examining its first bytes. """
+
+    BOMS = [
+        (b'\xef\xbb\xbf', 'utf-8'),
+        (b'\x00\x00\xfe\xff', 'utf-32-be'),
+        (b'\xff\xfe\x00\x00', 'utf-32-le'),
+        (b'\xff\xfe', 'utf-16-le'),
+        (b'\xfe\xff', 'utf-16-be'),
+    ]
+    for bom, enc in BOMS:
+        if first_bytes.startswith(bom):
+            s = first_bytes[len(bom):].decode(enc, 'replace')
+            break
+    else:
+        s = first_bytes.decode('utf-8', 'replace')
+
+    return re.match(r'^\s*<', s)
+
+
+def determine_protocol(info_dict):
+    protocol = info_dict.get('protocol')
+    if protocol is not None:
+        return protocol
+
+    url = info_dict['url']
+    if url.startswith('rtmp'):
+        return 'rtmp'
+    elif url.startswith('mms'):
+        return 'mms'
+    elif url.startswith('rtsp'):
+        return 'rtsp'
+
+    ext = determine_ext(url)
+    if ext == 'm3u8':
+        return 'm3u8'
+    elif ext == 'f4m':
+        return 'f4m'
+
+    return compat_urllib_parse_urlparse(url).scheme
+
+
+def render_table(header_row, data):
+    """ Render a list of rows, each as a list of values """
+    table = [header_row] + data
+    max_lens = [max(len(compat_str(v)) for v in col) for col in zip(*table)]
+    format_str = ' '.join('%-' + compat_str(ml + 1) + 's' for ml in max_lens[:-1]) + '%s'
+    return '\n'.join(format_str % tuple(row) for row in table)
+
+
+def _match_one(filter_part, dct):
+    COMPARISON_OPERATORS = {
+        '<': operator.lt,
+        '<=': operator.le,
+        '>': operator.gt,
+        '>=': operator.ge,
+        '=': operator.eq,
+        '!=': operator.ne,
+    }
+    operator_rex = re.compile(r'''(?x)\s*
+        (?P<key>[a-z_]+)
+        \s*(?P<op>%s)(?P<none_inclusive>\s*\?)?\s*
+        (?:
+            (?P<intval>[0-9.]+(?:[kKmMgGtTpPeEzZyY]i?[Bb]?)?)|
+            (?P<strval>(?![0-9.])[a-z0-9A-Z]*)
+        )
+        \s*$
+        ''' % '|'.join(map(re.escape, COMPARISON_OPERATORS.keys())))
+    m = operator_rex.search(filter_part)
+    if m:
+        op = COMPARISON_OPERATORS[m.group('op')]
+        if m.group('strval') is not None:
+            if m.group('op') not in ('=', '!='):
+                raise ValueError(
+                    'Operator %s does not support string values!' % m.group('op'))
+            comparison_value = m.group('strval')
+        else:
+            try:
+                comparison_value = int(m.group('intval'))
+            except ValueError:
+                comparison_value = parse_filesize(m.group('intval'))
+                if comparison_value is None:
+                    comparison_value = parse_filesize(m.group('intval') + 'B')
+                if comparison_value is None:
+                    raise ValueError(
+                        'Invalid integer value %r in filter part %r' % (
+                            m.group('intval'), filter_part))
+        actual_value = dct.get(m.group('key'))
+        if actual_value is None:
+            return m.group('none_inclusive')
+        return op(actual_value, comparison_value)
+
+    UNARY_OPERATORS = {
+        '': lambda v: v is not None,
+        '!': lambda v: v is None,
+    }
+    operator_rex = re.compile(r'''(?x)\s*
+        (?P<op>%s)\s*(?P<key>[a-z_]+)
+        \s*$
+        ''' % '|'.join(map(re.escape, UNARY_OPERATORS.keys())))
+    m = operator_rex.search(filter_part)
+    if m:
+        op = UNARY_OPERATORS[m.group('op')]
+        actual_value = dct.get(m.group('key'))
+        return op(actual_value)
+
+    raise ValueError('Invalid filter part %r' % filter_part)
+
+
+def match_str(filter_str, dct):
+    """ Filter a dictionary with a simple string syntax. Returns True (=passes filter) or false """
+
+    return all(
+        _match_one(filter_part, dct) for filter_part in filter_str.split('&'))
+
+
+def match_filter_func(filter_str):
+    def _match_func(info_dict):
+        if match_str(filter_str, info_dict):
+            return None
+        else:
+            video_title = info_dict.get('title', info_dict.get('id', 'video'))
+            return '%s does not pass filter %s, skipping ..' % (video_title, filter_str)
+    return _match_func
+
+
+def parse_dfxp_time_expr(time_expr):
+    if not time_expr:
+        return 0.0
+
+    mobj = re.match(r'^(?P<time_offset>\d+(?:\.\d+)?)s?$', time_expr)
+    if mobj:
+        return float(mobj.group('time_offset'))
+
+    mobj = re.match(r'^(\d+):(\d\d):(\d\d(?:\.\d+)?)$', time_expr)
+    if mobj:
+        return 3600 * int(mobj.group(1)) + 60 * int(mobj.group(2)) + float(mobj.group(3))
+
+
+def srt_subtitles_timecode(seconds):
+    return '%02d:%02d:%02d,%03d' % (seconds / 3600, (seconds % 3600) / 60, seconds % 60, (seconds % 1) * 1000)
+
+
+def dfxp2srt(dfxp_data):
+    _x = functools.partial(xpath_with_ns, ns_map={
+        'ttml': 'http://www.w3.org/ns/ttml',
+        'ttaf1': 'http://www.w3.org/2006/10/ttaf1',
+    })
+
+    def parse_node(node):
+        str_or_empty = functools.partial(str_or_none, default='')
+
+        out = str_or_empty(node.text)
+
+        for child in node:
+            if child.tag in (_x('ttml:br'), _x('ttaf1:br'), 'br'):
+                out += '\n' + str_or_empty(child.tail)
+            elif child.tag in (_x('ttml:span'), _x('ttaf1:span'), 'span'):
+                out += str_or_empty(parse_node(child))
+            else:
+                out += str_or_empty(xml.etree.ElementTree.tostring(child))
+
+        return out
+
+    dfxp = xml.etree.ElementTree.fromstring(dfxp_data.encode('utf-8'))
+    out = []
+    paras = dfxp.findall(_x('.//ttml:p')) or dfxp.findall(_x('.//ttaf1:p')) or dfxp.findall('.//p')
+
+    if not paras:
+        raise ValueError('Invalid dfxp/TTML subtitle')
+
+    for para, index in zip(paras, itertools.count(1)):
+        begin_time = parse_dfxp_time_expr(para.attrib['begin'])
+        end_time = parse_dfxp_time_expr(para.attrib.get('end'))
+        if not end_time:
+            end_time = begin_time + parse_dfxp_time_expr(para.attrib['dur'])
+        out.append('%d\n%s --> %s\n%s\n\n' % (
+            index,
+            srt_subtitles_timecode(begin_time),
+            srt_subtitles_timecode(end_time),
+            parse_node(para)))
+
+    return ''.join(out)
+
+
+class ISO639Utils(object):
+    # See http://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt
+    _lang_map = {
+        'aa': 'aar',
+        'ab': 'abk',
+        'ae': 'ave',
+        'af': 'afr',
+        'ak': 'aka',
+        'am': 'amh',
+        'an': 'arg',
+        'ar': 'ara',
+        'as': 'asm',
+        'av': 'ava',
+        'ay': 'aym',
+        'az': 'aze',
+        'ba': 'bak',
+        'be': 'bel',
+        'bg': 'bul',
+        'bh': 'bih',
+        'bi': 'bis',
+        'bm': 'bam',
+        'bn': 'ben',
+        'bo': 'bod',
+        'br': 'bre',
+        'bs': 'bos',
+        'ca': 'cat',
+        'ce': 'che',
+        'ch': 'cha',
+        'co': 'cos',
+        'cr': 'cre',
+        'cs': 'ces',
+        'cu': 'chu',
+        'cv': 'chv',
+        'cy': 'cym',
+        'da': 'dan',
+        'de': 'deu',
+        'dv': 'div',
+        'dz': 'dzo',
+        'ee': 'ewe',
+        'el': 'ell',
+        'en': 'eng',
+        'eo': 'epo',
+        'es': 'spa',
+        'et': 'est',
+        'eu': 'eus',
+        'fa': 'fas',
+        'ff': 'ful',
+        'fi': 'fin',
+        'fj': 'fij',
+        'fo': 'fao',
+        'fr': 'fra',
+        'fy': 'fry',
+        'ga': 'gle',
+        'gd': 'gla',
+        'gl': 'glg',
+        'gn': 'grn',
+        'gu': 'guj',
+        'gv': 'glv',
+        'ha': 'hau',
+        'he': 'heb',
+        'hi': 'hin',
+        'ho': 'hmo',
+        'hr': 'hrv',
+        'ht': 'hat',
+        'hu': 'hun',
+        'hy': 'hye',
+        'hz': 'her',
+        'ia': 'ina',
+        'id': 'ind',
+        'ie': 'ile',
+        'ig': 'ibo',
+        'ii': 'iii',
+        'ik': 'ipk',
+        'io': 'ido',
+        'is': 'isl',
+        'it': 'ita',
+        'iu': 'iku',
+        'ja': 'jpn',
+        'jv': 'jav',
+        'ka': 'kat',
+        'kg': 'kon',
+        'ki': 'kik',
+        'kj': 'kua',
+        'kk': 'kaz',
+        'kl': 'kal',
+        'km': 'khm',
+        'kn': 'kan',
+        'ko': 'kor',
+        'kr': 'kau',
+        'ks': 'kas',
+        'ku': 'kur',
+        'kv': 'kom',
+        'kw': 'cor',
+        'ky': 'kir',
+        'la': 'lat',
+        'lb': 'ltz',
+        'lg': 'lug',
+        'li': 'lim',
+        'ln': 'lin',
+        'lo': 'lao',
+        'lt': 'lit',
+        'lu': 'lub',
+        'lv': 'lav',
+        'mg': 'mlg',
+        'mh': 'mah',
+        'mi': 'mri',
+        'mk': 'mkd',
+        'ml': 'mal',
+        'mn': 'mon',
+        'mr': 'mar',
+        'ms': 'msa',
+        'mt': 'mlt',
+        'my': 'mya',
+        'na': 'nau',
+        'nb': 'nob',
+        'nd': 'nde',
+        'ne': 'nep',
+        'ng': 'ndo',
+        'nl': 'nld',
+        'nn': 'nno',
+        'no': 'nor',
+        'nr': 'nbl',
+        'nv': 'nav',
+        'ny': 'nya',
+        'oc': 'oci',
+        'oj': 'oji',
+        'om': 'orm',
+        'or': 'ori',
+        'os': 'oss',
+        'pa': 'pan',
+        'pi': 'pli',
+        'pl': 'pol',
+        'ps': 'pus',
+        'pt': 'por',
+        'qu': 'que',
+        'rm': 'roh',
+        'rn': 'run',
+        'ro': 'ron',
+        'ru': 'rus',
+        'rw': 'kin',
+        'sa': 'san',
+        'sc': 'srd',
+        'sd': 'snd',
+        'se': 'sme',
+        'sg': 'sag',
+        'si': 'sin',
+        'sk': 'slk',
+        'sl': 'slv',
+        'sm': 'smo',
+        'sn': 'sna',
+        'so': 'som',
+        'sq': 'sqi',
+        'sr': 'srp',
+        'ss': 'ssw',
+        'st': 'sot',
+        'su': 'sun',
+        'sv': 'swe',
+        'sw': 'swa',
+        'ta': 'tam',
+        'te': 'tel',
+        'tg': 'tgk',
+        'th': 'tha',
+        'ti': 'tir',
+        'tk': 'tuk',
+        'tl': 'tgl',
+        'tn': 'tsn',
+        'to': 'ton',
+        'tr': 'tur',
+        'ts': 'tso',
+        'tt': 'tat',
+        'tw': 'twi',
+        'ty': 'tah',
+        'ug': 'uig',
+        'uk': 'ukr',
+        'ur': 'urd',
+        'uz': 'uzb',
+        've': 'ven',
+        'vi': 'vie',
+        'vo': 'vol',
+        'wa': 'wln',
+        'wo': 'wol',
+        'xh': 'xho',
+        'yi': 'yid',
+        'yo': 'yor',
+        'za': 'zha',
+        'zh': 'zho',
+        'zu': 'zul',
+    }
+
+    @classmethod
+    def short2long(cls, code):
+        """Convert language code from ISO 639-1 to ISO 639-2/T"""
+        return cls._lang_map.get(code[:2])
+
+    @classmethod
+    def long2short(cls, code):
+        """Convert language code from ISO 639-2/T to ISO 639-1"""
+        for short_name, long_name in cls._lang_map.items():
+            if long_name == code:
+                return short_name
+
+
+class ISO3166Utils(object):
+    # From http://data.okfn.org/data/core/country-list
+    _country_map = {
+        'AF': 'Afghanistan',
+        'AX': 'Åland Islands',
+        'AL': 'Albania',
+        'DZ': 'Algeria',
+        'AS': 'American Samoa',
+        'AD': 'Andorra',
+        'AO': 'Angola',
+        'AI': 'Anguilla',
+        'AQ': 'Antarctica',
+        'AG': 'Antigua and Barbuda',
+        'AR': 'Argentina',
+        'AM': 'Armenia',
+        'AW': 'Aruba',
+        'AU': 'Australia',
+        'AT': 'Austria',
+        'AZ': 'Azerbaijan',
+        'BS': 'Bahamas',
+        'BH': 'Bahrain',
+        'BD': 'Bangladesh',
+        'BB': 'Barbados',
+        'BY': 'Belarus',
+        'BE': 'Belgium',
+        'BZ': 'Belize',
+        'BJ': 'Benin',
+        'BM': 'Bermuda',
+        'BT': 'Bhutan',
+        'BO': 'Bolivia, Plurinational State of',
+        'BQ': 'Bonaire, Sint Eustatius and Saba',
+        'BA': 'Bosnia and Herzegovina',
+        'BW': 'Botswana',
+        'BV': 'Bouvet Island',
+        'BR': 'Brazil',
+        'IO': 'British Indian Ocean Territory',
+        'BN': 'Brunei Darussalam',
+        'BG': 'Bulgaria',
+        'BF': 'Burkina Faso',
+        'BI': 'Burundi',
+        'KH': 'Cambodia',
+        'CM': 'Cameroon',
+        'CA': 'Canada',
+        'CV': 'Cape Verde',
+        'KY': 'Cayman Islands',
+        'CF': 'Central African Republic',
+        'TD': 'Chad',
+        'CL': 'Chile',
+        'CN': 'China',
+        'CX': 'Christmas Island',
+        'CC': 'Cocos (Keeling) Islands',
+        'CO': 'Colombia',
+        'KM': 'Comoros',
+        'CG': 'Congo',
+        'CD': 'Congo, the Democratic Republic of the',
+        'CK': 'Cook Islands',
+        'CR': 'Costa Rica',
+        'CI': 'Côte d\'Ivoire',
+        'HR': 'Croatia',
+        'CU': 'Cuba',
+        'CW': 'Curaçao',
+        'CY': 'Cyprus',
+        'CZ': 'Czech Republic',
+        'DK': 'Denmark',
+        'DJ': 'Djibouti',
+        'DM': 'Dominica',
+        'DO': 'Dominican Republic',
+        'EC': 'Ecuador',
+        'EG': 'Egypt',
+        'SV': 'El Salvador',
+        'GQ': 'Equatorial Guinea',
+        'ER': 'Eritrea',
+        'EE': 'Estonia',
+        'ET': 'Ethiopia',
+        'FK': 'Falkland Islands (Malvinas)',
+        'FO': 'Faroe Islands',
+        'FJ': 'Fiji',
+        'FI': 'Finland',
+        'FR': 'France',
+        'GF': 'French Guiana',
+        'PF': 'French Polynesia',
+        'TF': 'French Southern Territories',
+        'GA': 'Gabon',
+        'GM': 'Gambia',
+        'GE': 'Georgia',
+        'DE': 'Germany',
+        'GH': 'Ghana',
+        'GI': 'Gibraltar',
+        'GR': 'Greece',
+        'GL': 'Greenland',
+        'GD': 'Grenada',
+        'GP': 'Guadeloupe',
+        'GU': 'Guam',
+        'GT': 'Guatemala',
+        'GG': 'Guernsey',
+        'GN': 'Guinea',
+        'GW': 'Guinea-Bissau',
+        'GY': 'Guyana',
+        'HT': 'Haiti',
+        'HM': 'Heard Island and McDonald Islands',
+        'VA': 'Holy See (Vatican City State)',
+        'HN': 'Honduras',
+        'HK': 'Hong Kong',
+        'HU': 'Hungary',
+        'IS': 'Iceland',
+        'IN': 'India',
+        'ID': 'Indonesia',
+        'IR': 'Iran, Islamic Republic of',
+        'IQ': 'Iraq',
+        'IE': 'Ireland',
+        'IM': 'Isle of Man',
+        'IL': 'Israel',
+        'IT': 'Italy',
+        'JM': 'Jamaica',
+        'JP': 'Japan',
+        'JE': 'Jersey',
+        'JO': 'Jordan',
+        'KZ': 'Kazakhstan',
+        'KE': 'Kenya',
+        'KI': 'Kiribati',
+        'KP': 'Korea, Democratic People\'s Republic of',
+        'KR': 'Korea, Republic of',
+        'KW': 'Kuwait',
+        'KG': 'Kyrgyzstan',
+        'LA': 'Lao People\'s Democratic Republic',
+        'LV': 'Latvia',
+        'LB': 'Lebanon',
+        'LS': 'Lesotho',
+        'LR': 'Liberia',
+        'LY': 'Libya',
+        'LI': 'Liechtenstein',
+        'LT': 'Lithuania',
+        'LU': 'Luxembourg',
+        'MO': 'Macao',
+        'MK': 'Macedonia, the Former Yugoslav Republic of',
+        'MG': 'Madagascar',
+        'MW': 'Malawi',
+        'MY': 'Malaysia',
+        'MV': 'Maldives',
+        'ML': 'Mali',
+        'MT': 'Malta',
+        'MH': 'Marshall Islands',
+        'MQ': 'Martinique',
+        'MR': 'Mauritania',
+        'MU': 'Mauritius',
+        'YT': 'Mayotte',
+        'MX': 'Mexico',
+        'FM': 'Micronesia, Federated States of',
+        'MD': 'Moldova, Republic of',
+        'MC': 'Monaco',
+        'MN': 'Mongolia',
+        'ME': 'Montenegro',
+        'MS': 'Montserrat',
+        'MA': 'Morocco',
+        'MZ': 'Mozambique',
+        'MM': 'Myanmar',
+        'NA': 'Namibia',
+        'NR': 'Nauru',
+        'NP': 'Nepal',
+        'NL': 'Netherlands',
+        'NC': 'New Caledonia',
+        'NZ': 'New Zealand',
+        'NI': 'Nicaragua',
+        'NE': 'Niger',
+        'NG': 'Nigeria',
+        'NU': 'Niue',
+        'NF': 'Norfolk Island',
+        'MP': 'Northern Mariana Islands',
+        'NO': 'Norway',
+        'OM': 'Oman',
+        'PK': 'Pakistan',
+        'PW': 'Palau',
+        'PS': 'Palestine, State of',
+        'PA': 'Panama',
+        'PG': 'Papua New Guinea',
+        'PY': 'Paraguay',
+        'PE': 'Peru',
+        'PH': 'Philippines',
+        'PN': 'Pitcairn',
+        'PL': 'Poland',
+        'PT': 'Portugal',
+        'PR': 'Puerto Rico',
+        'QA': 'Qatar',
+        'RE': 'Réunion',
+        'RO': 'Romania',
+        'RU': 'Russian Federation',
+        'RW': 'Rwanda',
+        'BL': 'Saint Barthélemy',
+        'SH': 'Saint Helena, Ascension and Tristan da Cunha',
+        'KN': 'Saint Kitts and Nevis',
+        'LC': 'Saint Lucia',
+        'MF': 'Saint Martin (French part)',
+        'PM': 'Saint Pierre and Miquelon',
+        'VC': 'Saint Vincent and the Grenadines',
+        'WS': 'Samoa',
+        'SM': 'San Marino',
+        'ST': 'Sao Tome and Principe',
+        'SA': 'Saudi Arabia',
+        'SN': 'Senegal',
+        'RS': 'Serbia',
+        'SC': 'Seychelles',
+        'SL': 'Sierra Leone',
+        'SG': 'Singapore',
+        'SX': 'Sint Maarten (Dutch part)',
+        'SK': 'Slovakia',
+        'SI': 'Slovenia',
+        'SB': 'Solomon Islands',
+        'SO': 'Somalia',
+        'ZA': 'South Africa',
+        'GS': 'South Georgia and the South Sandwich Islands',
+        'SS': 'South Sudan',
+        'ES': 'Spain',
+        'LK': 'Sri Lanka',
+        'SD': 'Sudan',
+        'SR': 'Suriname',
+        'SJ': 'Svalbard and Jan Mayen',
+        'SZ': 'Swaziland',
+        'SE': 'Sweden',
+        'CH': 'Switzerland',
+        'SY': 'Syrian Arab Republic',
+        'TW': 'Taiwan, Province of China',
+        'TJ': 'Tajikistan',
+        'TZ': 'Tanzania, United Republic of',
+        'TH': 'Thailand',
+        'TL': 'Timor-Leste',
+        'TG': 'Togo',
+        'TK': 'Tokelau',
+        'TO': 'Tonga',
+        'TT': 'Trinidad and Tobago',
+        'TN': 'Tunisia',
+        'TR': 'Turkey',
+        'TM': 'Turkmenistan',
+        'TC': 'Turks and Caicos Islands',
+        'TV': 'Tuvalu',
+        'UG': 'Uganda',
+        'UA': 'Ukraine',
+        'AE': 'United Arab Emirates',
+        'GB': 'United Kingdom',
+        'US': 'United States',
+        'UM': 'United States Minor Outlying Islands',
+        'UY': 'Uruguay',
+        'UZ': 'Uzbekistan',
+        'VU': 'Vanuatu',
+        'VE': 'Venezuela, Bolivarian Republic of',
+        'VN': 'Viet Nam',
+        'VG': 'Virgin Islands, British',
+        'VI': 'Virgin Islands, U.S.',
+        'WF': 'Wallis and Futuna',
+        'EH': 'Western Sahara',
+        'YE': 'Yemen',
+        'ZM': 'Zambia',
+        'ZW': 'Zimbabwe',
+    }
+
+    @classmethod
+    def short2full(cls, code):
+        """Convert an ISO 3166-2 country code to the corresponding full name"""
+        return cls._country_map.get(code.upper())
+
+
+class PerRequestProxyHandler(compat_urllib_request.ProxyHandler):
+    def __init__(self, proxies=None):
+        # Set default handlers
+        for type in ('http', 'https'):
+            setattr(self, '%s_open' % type,
+                    lambda r, proxy='__noproxy__', type=type, meth=self.proxy_open:
+                        meth(r, proxy, type))
+        return compat_urllib_request.ProxyHandler.__init__(self, proxies)
+
+    def proxy_open(self, req, proxy, type):
+        req_proxy = req.headers.get('Ytdl-request-proxy')
+        if req_proxy is not None:
+            proxy = req_proxy
+            del req.headers['Ytdl-request-proxy']
+
+        if proxy == '__noproxy__':
+            return None  # No Proxy
+        return compat_urllib_request.ProxyHandler.proxy_open(
+            self, req, proxy, type)

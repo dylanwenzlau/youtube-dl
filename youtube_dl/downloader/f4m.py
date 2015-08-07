@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+from __future__ import division, unicode_literals
 
 import base64
 import io
@@ -7,17 +7,14 @@ import os
 import time
 import xml.etree.ElementTree as etree
 
-from .common import FileDownloader
-from .http import HttpFD
+from .fragment import FragmentFD
 from ..compat import (
     compat_urlparse,
+    compat_urllib_error,
 )
 from ..utils import (
     struct_pack,
     struct_unpack,
-    format_bytes,
-    encodeFilename,
-    sanitize_open,
     xpath_text,
 )
 
@@ -122,7 +119,8 @@ class FlvReader(io.BytesIO):
 
         self.read_unsigned_int()  # BootstrapinfoVersion
         # Profile,Live,Update,Reserved
-        self.read(1)
+        flags = self.read_unsigned_char()
+        live = flags & 0x20 != 0
         # time scale
         self.read_unsigned_int()
         # CurrentMediaTime
@@ -161,6 +159,7 @@ class FlvReader(io.BytesIO):
         return {
             'segments': segments,
             'fragments': fragments,
+            'live': live,
         }
 
     def read_bootstrap_info(self):
@@ -177,69 +176,118 @@ def build_fragments_list(boot_info):
     """ Return a list of (segment, fragment) for each fragment in the video """
     res = []
     segment_run_table = boot_info['segments'][0]
-    # I've only found videos with one segment
-    segment_run_entry = segment_run_table['segment_run'][0]
-    n_frags = segment_run_entry[1]
     fragment_run_entry_table = boot_info['fragments'][0]['fragments']
     first_frag_number = fragment_run_entry_table[0]['first']
-    for (i, frag_number) in zip(range(1, n_frags + 1), itertools.count(first_frag_number)):
-        res.append((1, frag_number))
+    fragments_counter = itertools.count(first_frag_number)
+    for segment, fragments_count in segment_run_table['segment_run']:
+        for _ in range(fragments_count):
+            res.append((segment, next(fragments_counter)))
+
+    if boot_info['live']:
+        res = res[-2:]
+
     return res
 
 
-def write_flv_header(stream, metadata):
-    """Writes the FLV header and the metadata to stream"""
+def write_unsigned_int(stream, val):
+    stream.write(struct_pack('!I', val))
+
+
+def write_unsigned_int_24(stream, val):
+    stream.write(struct_pack('!I', val)[1:])
+
+
+def write_flv_header(stream):
+    """Writes the FLV header to stream"""
     # FLV header
     stream.write(b'FLV\x01')
     stream.write(b'\x05')
     stream.write(b'\x00\x00\x00\x09')
-    # FLV File body
     stream.write(b'\x00\x00\x00\x00')
-    # FLVTAG
-    # Script data
-    stream.write(b'\x12')
-    # Size of the metadata with 3 bytes
-    stream.write(struct_pack('!L', len(metadata))[1:])
-    stream.write(b'\x00\x00\x00\x00\x00\x00\x00')
-    stream.write(metadata)
-    # Magic numbers extracted from the output files produced by AdobeHDS.php
-    #(https://github.com/K-S-V/Scripts)
-    stream.write(b'\x00\x00\x01\x73')
+
+
+def write_metadata_tag(stream, metadata):
+    """Writes optional metadata tag to stream"""
+    SCRIPT_TAG = b'\x12'
+    FLV_TAG_HEADER_LEN = 11
+
+    if metadata:
+        stream.write(SCRIPT_TAG)
+        write_unsigned_int_24(stream, len(metadata))
+        stream.write(b'\x00\x00\x00\x00\x00\x00\x00')
+        stream.write(metadata)
+        write_unsigned_int(stream, FLV_TAG_HEADER_LEN + len(metadata))
 
 
 def _add_ns(prop):
     return '{http://ns.adobe.com/f4m/1.0}%s' % prop
 
 
-class HttpQuietDownloader(HttpFD):
-    def to_screen(self, *args, **kargs):
-        pass
-
-
-class F4mFD(FileDownloader):
+class F4mFD(FragmentFD):
     """
     A downloader for f4m manifests or AdobeHDS.
     """
 
+    FD_NAME = 'f4m'
+
+    def _get_unencrypted_media(self, doc):
+        media = doc.findall(_add_ns('media'))
+        if not media:
+            self.report_error('No media found')
+        for e in (doc.findall(_add_ns('drmAdditionalHeader')) +
+                  doc.findall(_add_ns('drmAdditionalHeaderSet'))):
+            # If id attribute is missing it's valid for all media nodes
+            # without drmAdditionalHeaderId or drmAdditionalHeaderSetId attribute
+            if 'id' not in e.attrib:
+                self.report_error('Missing ID in f4m DRM')
+        media = list(filter(lambda e: 'drmAdditionalHeaderId' not in e.attrib and
+                                      'drmAdditionalHeaderSetId' not in e.attrib,
+                            media))
+        if not media:
+            self.report_error('Unsupported DRM')
+        return media
+
+    def _get_bootstrap_from_url(self, bootstrap_url):
+        bootstrap = self.ydl.urlopen(bootstrap_url).read()
+        return read_bootstrap_info(bootstrap)
+
+    def _update_live_fragments(self, bootstrap_url, latest_fragment):
+        fragments_list = []
+        retries = 30
+        while (not fragments_list) and (retries > 0):
+            boot_info = self._get_bootstrap_from_url(bootstrap_url)
+            fragments_list = build_fragments_list(boot_info)
+            fragments_list = [f for f in fragments_list if f[1] > latest_fragment]
+            if not fragments_list:
+                # Retry after a while
+                time.sleep(5.0)
+                retries -= 1
+
+        if not fragments_list:
+            self.report_error('Failed to update fragments')
+
+        return fragments_list
+
+    def _parse_bootstrap_node(self, node, base_url):
+        if node.text is None:
+            bootstrap_url = compat_urlparse.urljoin(
+                base_url, node.attrib['url'])
+            boot_info = self._get_bootstrap_from_url(bootstrap_url)
+        else:
+            bootstrap_url = None
+            bootstrap = base64.b64decode(node.text.encode('ascii'))
+            boot_info = read_bootstrap_info(bootstrap)
+        return (boot_info, bootstrap_url)
+
     def real_download(self, filename, info_dict):
         man_url = info_dict['url']
         requested_bitrate = info_dict.get('tbr')
-        self.to_screen('[download] Downloading f4m manifest')
+        self.to_screen('[%s] Downloading f4m manifest' % self.FD_NAME)
         manifest = self.ydl.urlopen(man_url).read()
-        self.report_destination(filename)
-        http_dl = HttpQuietDownloader(
-            self.ydl,
-            {
-                'continuedl': True,
-                'quiet': True,
-                'noprogress': True,
-                'ratelimit': self.params.get('ratelimit', None),
-                'test': self.params.get('test', False),
-            }
-        )
 
         doc = etree.fromstring(manifest)
-        formats = [(int(f.attrib.get('bitrate', -1)), f) for f in doc.findall(_add_ns('media'))]
+        formats = [(int(f.attrib.get('bitrate', -1)), f)
+                   for f in self._get_unencrypted_media(doc)]
         if requested_bitrate is None:
             # get the best format
             formats = sorted(formats, key=lambda f: f[0])
@@ -250,14 +298,13 @@ class F4mFD(FileDownloader):
 
         base_url = compat_urlparse.urljoin(man_url, media.attrib['url'])
         bootstrap_node = doc.find(_add_ns('bootstrapInfo'))
-        if bootstrap_node.text is None:
-            bootstrap_url = compat_urlparse.urljoin(
-                base_url, bootstrap_node.attrib['url'])
-            bootstrap = self.ydl.urlopen(bootstrap_url).read()
+        boot_info, bootstrap_url = self._parse_bootstrap_node(bootstrap_node, base_url)
+        live = boot_info['live']
+        metadata_node = media.find(_add_ns('metadata'))
+        if metadata_node is not None:
+            metadata = base64.b64decode(metadata_node.text.encode('ascii'))
         else:
-            bootstrap = base64.b64decode(bootstrap_node.text)
-        metadata = base64.b64decode(media.find(_add_ns('metadata')).text)
-        boot_info = read_bootstrap_info(bootstrap)
+            metadata = None
 
         fragments_list = build_fragments_list(boot_info)
         if self.params.get('test', False):
@@ -267,73 +314,67 @@ class F4mFD(FileDownloader):
         # For some akamai manifests we'll need to add a query to the fragment url
         akamai_pv = xpath_text(doc, _add_ns('pv-2.0'))
 
-        tmpfilename = self.temp_name(filename)
-        (dest_stream, tmpfilename) = sanitize_open(tmpfilename, 'wb')
-        write_flv_header(dest_stream, metadata)
-
-        # This dict stores the download progress, it's updated by the progress
-        # hook
-        state = {
-            'downloaded_bytes': 0,
-            'frag_counter': 0,
+        ctx = {
+            'filename': filename,
+            'total_frags': total_frags,
         }
-        start = time.time()
 
-        def frag_progress_hook(status):
-            frag_total_bytes = status.get('total_bytes', 0)
-            estimated_size = (state['downloaded_bytes'] +
-                              (total_frags - state['frag_counter']) * frag_total_bytes)
-            if status['status'] == 'finished':
-                state['downloaded_bytes'] += frag_total_bytes
-                state['frag_counter'] += 1
-                progress = self.calc_percent(state['frag_counter'], total_frags)
-                byte_counter = state['downloaded_bytes']
-            else:
-                frag_downloaded_bytes = status['downloaded_bytes']
-                byte_counter = state['downloaded_bytes'] + frag_downloaded_bytes
-                frag_progress = self.calc_percent(frag_downloaded_bytes,
-                                                  frag_total_bytes)
-                progress = self.calc_percent(state['frag_counter'], total_frags)
-                progress += frag_progress / float(total_frags)
+        self._prepare_frag_download(ctx)
 
-            eta = self.calc_eta(start, time.time(), estimated_size, byte_counter)
-            self.report_progress(progress, format_bytes(estimated_size),
-                                 status.get('speed'), eta)
-        http_dl.add_progress_hook(frag_progress_hook)
+        dest_stream = ctx['dest_stream']
+
+        write_flv_header(dest_stream)
+        if not live:
+            write_metadata_tag(dest_stream, metadata)
+
+        self._start_frag_download(ctx)
 
         frags_filenames = []
-        for (seg_i, frag_i) in fragments_list:
+        while fragments_list:
+            seg_i, frag_i = fragments_list.pop(0)
             name = 'Seg%d-Frag%d' % (seg_i, frag_i)
             url = base_url + name
             if akamai_pv:
                 url += '?' + akamai_pv.strip(';')
-            frag_filename = '%s-%s' % (tmpfilename, name)
-            success = http_dl.download(frag_filename, {'url': url})
-            if not success:
-                return False
-            with open(frag_filename, 'rb') as down:
-                down_data = down.read()
-                reader = FlvReader(down_data)
-                while True:
-                    _, box_type, box_data = reader.read_box_info()
-                    if box_type == b'mdat':
-                        dest_stream.write(box_data)
-                        break
-            frags_filenames.append(frag_filename)
+            if info_dict.get('extra_param_to_segment_url'):
+                url += info_dict.get('extra_param_to_segment_url')
+            frag_filename = '%s-%s' % (ctx['tmpfilename'], name)
+            try:
+                success = ctx['dl'].download(frag_filename, {'url': url})
+                if not success:
+                    return False
+                with open(frag_filename, 'rb') as down:
+                    down_data = down.read()
+                    reader = FlvReader(down_data)
+                    while True:
+                        _, box_type, box_data = reader.read_box_info()
+                        if box_type == b'mdat':
+                            dest_stream.write(box_data)
+                            break
+                if live:
+                    os.remove(frag_filename)
+                else:
+                    frags_filenames.append(frag_filename)
+            except (compat_urllib_error.HTTPError, ) as err:
+                if live and (err.code == 404 or err.code == 410):
+                    # We didn't keep up with the live window. Continue
+                    # with the next available fragment.
+                    msg = 'Fragment %d unavailable' % frag_i
+                    self.report_warning(msg)
+                    fragments_list = []
+                else:
+                    raise
 
-        dest_stream.close()
-        self.report_finish(format_bytes(state['downloaded_bytes']), time.time() - start)
+            if not fragments_list and live and bootstrap_url:
+                fragments_list = self._update_live_fragments(bootstrap_url, frag_i)
+                total_frags += len(fragments_list)
+                if fragments_list and (fragments_list[0][1] > frag_i + 1):
+                    msg = 'Missed %d fragments' % (fragments_list[0][1] - (frag_i + 1))
+                    self.report_warning(msg)
 
-        self.try_rename(tmpfilename, filename)
+        self._finish_frag_download(ctx)
+
         for frag_file in frags_filenames:
             os.remove(frag_file)
-
-        fsize = os.path.getsize(encodeFilename(filename))
-        self._hook_progress({
-            'downloaded_bytes': fsize,
-            'total_bytes': fsize,
-            'filename': filename,
-            'status': 'finished',
-        })
 
         return True

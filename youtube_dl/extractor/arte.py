@@ -7,7 +7,6 @@ from .common import InfoExtractor
 from ..utils import (
     find_xpath_attr,
     unified_strdate,
-    get_element_by_id,
     get_element_by_attribute,
     int_or_none,
     qualities,
@@ -37,7 +36,7 @@ class ArteTvIE(InfoExtractor):
             config_xml_url, video_id, note='Downloading configuration')
 
         formats = [{
-            'forma_id': q.attrib['quality'],
+            'format_id': q.attrib['quality'],
             # The playpath starts at 'mp4:', if we don't manually
             # split the url, rtmpdump will incorrectly parse them
             'url': q.text.split('mp4:', 1)[0],
@@ -133,7 +132,7 @@ class ArteTVPlus7IE(InfoExtractor):
                 'width': int_or_none(f.get('width')),
                 'height': int_or_none(f.get('height')),
                 'tbr': int_or_none(f.get('bitrate')),
-                'quality': qfunc(f['quality']),
+                'quality': qfunc(f.get('quality')),
                 'source_preference': source_pref,
             }
 
@@ -146,6 +145,7 @@ class ArteTVPlus7IE(InfoExtractor):
 
             formats.append(format)
 
+        self._check_formats(formats, video_id)
         self._sort_formats(formats)
 
         info_dict['formats'] = formats
@@ -194,7 +194,9 @@ class ArteTVFutureIE(ArteTVPlus7IE):
     def _real_extract(self, url):
         anchor_id, lang = self._extract_url_info(url)
         webpage = self._download_webpage(url, anchor_id)
-        row = get_element_by_id(anchor_id, webpage)
+        row = self._search_regex(
+            r'(?s)id="%s"[^>]*>.+?(<div[^>]*arte_vp_url[^>]*>)' % anchor_id,
+            webpage, 'row')
         return self._extract_from_webpage(row, anchor_id, lang)
 
 

@@ -13,6 +13,7 @@ from .compat import (
     compat_str,
     compat_urllib_request,
 )
+from .utils import make_HTTPS_handler
 from .version import __version__
 
 
@@ -49,7 +50,7 @@ def rsa_verify(message, signature, key):
 def update_self(to_screen, verbose):
     """Update the program file with the latest version from the repository"""
 
-    UPDATE_URL = "http://rg3.github.io/youtube-dl/update/"
+    UPDATE_URL = "https://rg3.github.io/youtube-dl/update/"
     VERSION_URL = UPDATE_URL + 'LATEST_VERSION'
     JSON_URL = UPDATE_URL + 'versions.json'
     UPDATES_RSA_KEY = (0x9d60ee4d8f805312fdb15a62f87b95bd66177b91df176765d13514a0f1754bcd2057295c5b6f1d35daa6742c3ffc9a82d3e118861c207995a8031e151d863c9927e304576bc80692bc8e094896fcf11b66f3e29e04e3a71e9a11558558acea1840aec37fc396fb6b65dc81a1c4144e03bd1c011de62e3f1357b327d08426fe93, 65537)
@@ -58,10 +59,13 @@ def update_self(to_screen, verbose):
         to_screen('It looks like you installed youtube-dl with a package manager, pip, setup.py or a tarball. Please use that to update.')
         return
 
+    https_handler = make_HTTPS_handler({})
+    opener = compat_urllib_request.build_opener(https_handler)
+
     # Check if there is a new version
     try:
-        newversion = compat_urllib_request.urlopen(VERSION_URL).read().decode('utf-8').strip()
-    except:
+        newversion = opener.open(VERSION_URL).read().decode('utf-8').strip()
+    except Exception:
         if verbose:
             to_screen(compat_str(traceback.format_exc()))
         to_screen('ERROR: can\'t find the current version. Please try again later.')
@@ -72,9 +76,9 @@ def update_self(to_screen, verbose):
 
     # Download and check versions info
     try:
-        versions_info = compat_urllib_request.urlopen(JSON_URL).read().decode('utf-8')
+        versions_info = opener.open(JSON_URL).read().decode('utf-8')
         versions_info = json.loads(versions_info)
-    except:
+    except Exception:
         if verbose:
             to_screen(compat_str(traceback.format_exc()))
         to_screen('ERROR: can\'t obtain versions info. Please try again later.')
@@ -120,7 +124,7 @@ def update_self(to_screen, verbose):
             return
 
         try:
-            urlh = compat_urllib_request.urlopen(version['exe'][0])
+            urlh = opener.open(version['exe'][0])
             newcontent = urlh.read()
             urlh.close()
         except (IOError, OSError):
@@ -166,7 +170,7 @@ start /b "" cmd /c del "%%~f0"&exit /b"
     # Zip unix package
     elif isinstance(globals().get('__loader__'), zipimporter):
         try:
-            urlh = compat_urllib_request.urlopen(version['bin'][0])
+            urlh = opener.open(version['bin'][0])
             newcontent = urlh.read()
             urlh.close()
         except (IOError, OSError):

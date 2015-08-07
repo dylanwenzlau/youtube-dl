@@ -2,35 +2,53 @@
 from __future__ import unicode_literals
 
 import re
+import itertools
+import json
+import xml.etree.ElementTree as ET
 
 from .common import InfoExtractor
-from ..compat import compat_parse_qs
 from ..utils import (
-    ExtractorError,
     int_or_none,
     unified_strdate,
+    ExtractorError,
 )
 
 
 class BiliBiliIE(InfoExtractor):
     _VALID_URL = r'http://www\.bilibili\.(?:tv|com)/video/av(?P<id>[0-9]+)/'
 
-    _TEST = {
+    _TESTS = [{
         'url': 'http://www.bilibili.tv/video/av1074402/',
         'md5': '2c301e4dab317596e837c3e7633e7d86',
         'info_dict': {
-            'id': '1074402',
+            'id': '1074402_part1',
             'ext': 'flv',
             'title': '【金坷垃】金泡沫',
             'duration': 308,
             'upload_date': '20140420',
             'thumbnail': 're:^https?://.+\.jpg',
         },
-    }
+    }, {
+        'url': 'http://www.bilibili.com/video/av1041170/',
+        'info_dict': {
+            'id': '1041170',
+            'title': '【BD1080P】刀语【诸神&异域】',
+        },
+        'playlist_count': 9,
+    }]
 
     def _real_extract(self, url):
         video_id = self._match_id(url)
         webpage = self._download_webpage(url, video_id)
+
+        if '(此视频不存在或被删除)' in webpage:
+            raise ExtractorError(
+                'The video does not exist or was deleted', expected=True)
+
+        if '>你没有权限浏览！ 由于版权相关问题 我们不对您所在的地区提供服务<' in webpage:
+            raise ExtractorError(
+                'The video is not available in your region due to copyright reasons',
+                expected=True)
 
         video_code = self._search_regex(
             r'(?s)<div itemprop="video".*?>(.*?)</div>', webpage, 'video code')
@@ -54,19 +72,39 @@ class BiliBiliIE(InfoExtractor):
         thumbnail = self._html_search_meta(
             'thumbnailUrl', video_code, 'thumbnail', fatal=False)
 
-        player_params = compat_parse_qs(self._html_search_regex(
-            r'<iframe .*?class="player" src="https://secure\.bilibili\.(?:tv|com)/secure,([^"]+)"',
-            webpage, 'player params'))
+        cid = self._search_regex(r'cid=(\d+)', webpage, 'cid')
 
-        if 'cid' in player_params:
-            cid = player_params['cid'][0]
+        entries = []
 
-            lq_doc = self._download_xml(
-                'http://interface.bilibili.cn/v_cdn_play?cid=%s' % cid,
-                video_id,
-                note='Downloading LQ video info'
-            )
-            lq_durl = lq_doc.find('.//durl')
+        lq_page = self._download_webpage(
+            'http://interface.bilibili.com/v_cdn_play?appkey=1&cid=%s' % cid,
+            video_id,
+            note='Downloading LQ video info'
+        )
+        try:
+            err_info = json.loads(lq_page)
+            raise ExtractorError(
+                'BiliBili said: ' + err_info['error_text'], expected=True)
+        except ValueError:
+            pass
+
+        lq_doc = ET.fromstring(lq_page)
+        lq_durls = lq_doc.findall('./durl')
+
+        hq_doc = self._download_xml(
+            'http://interface.bilibili.com/playurl?appkey=1&cid=%s' % cid,
+            video_id,
+            note='Downloading HQ video info',
+            fatal=False,
+        )
+        if hq_doc is not False:
+            hq_durls = hq_doc.findall('./durl')
+            assert len(lq_durls) == len(hq_durls)
+        else:
+            hq_durls = itertools.repeat(None)
+
+        i = 1
+        for lq_durl, hq_durl in zip(lq_durls, hq_durls):
             formats = [{
                 'format_id': 'lq',
                 'quality': 1,
@@ -74,15 +112,7 @@ class BiliBiliIE(InfoExtractor):
                 'filesize': int_or_none(
                     lq_durl.find('./size'), get_attr='text'),
             }]
-
-            hq_doc = self._download_xml(
-                'http://interface.bilibili.cn/playurl?cid=%s' % cid,
-                video_id,
-                note='Downloading HQ video info',
-                fatal=False,
-            )
-            if hq_doc is not False:
-                hq_durl = hq_doc.find('.//durl')
+            if hq_durl is not None:
                 formats.append({
                     'format_id': 'hq',
                     'quality': 2,
@@ -91,15 +121,22 @@ class BiliBiliIE(InfoExtractor):
                     'filesize': int_or_none(
                         hq_durl.find('./size'), get_attr='text'),
                 })
-        else:
-            raise ExtractorError('Unsupported player parameters: %r' % (player_params,))
+            self._sort_formats(formats)
 
-        self._sort_formats(formats)
+            entries.append({
+                'id': '%s_part%d' % (video_id, i),
+                'title': title,
+                'formats': formats,
+                'duration': duration,
+                'upload_date': upload_date,
+                'thumbnail': thumbnail,
+            })
+
+            i += 1
+
         return {
+            '_type': 'multi_video',
+            'entries': entries,
             'id': video_id,
-            'title': title,
-            'formats': formats,
-            'duration': duration,
-            'upload_date': upload_date,
-            'thumbnail': thumbnail,
+            'title': title
         }

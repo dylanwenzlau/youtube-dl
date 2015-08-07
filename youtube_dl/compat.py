@@ -1,11 +1,15 @@
 from __future__ import unicode_literals
 
+import collections
 import getpass
 import optparse
 import os
 import re
+import shutil
+import socket
 import subprocess
 import sys
+import itertools
 
 
 try:
@@ -39,14 +43,14 @@ except ImportError:  # Python 2
     import cookielib as compat_cookiejar
 
 try:
+    import http.cookies as compat_cookies
+except ImportError:  # Python 2
+    import Cookie as compat_cookies
+
+try:
     import html.entities as compat_html_entities
 except ImportError:  # Python 2
     import htmlentitydefs as compat_html_entities
-
-try:
-    import html.parser as compat_html_parser
-except ImportError:  # Python 2
-    import HTMLParser as compat_html_parser
 
 try:
     import http.client as compat_http_client
@@ -71,42 +75,99 @@ except ImportError:
     compat_subprocess_get_DEVNULL = lambda: open(os.path.devnull, 'w')
 
 try:
-    from urllib.parse import unquote as compat_urllib_parse_unquote
+    import http.server as compat_http_server
 except ImportError:
-    def compat_urllib_parse_unquote(string, encoding='utf-8', errors='replace'):
-        if string == '':
+    import BaseHTTPServer as compat_http_server
+
+try:
+    from urllib.parse import unquote_to_bytes as compat_urllib_parse_unquote_to_bytes
+    from urllib.parse import unquote as compat_urllib_parse_unquote
+    from urllib.parse import unquote_plus as compat_urllib_parse_unquote_plus
+except ImportError:  # Python 2
+    _asciire = (compat_urllib_parse._asciire if hasattr(compat_urllib_parse, '_asciire')
+                else re.compile('([\x00-\x7f]+)'))
+
+    # HACK: The following are the correct unquote_to_bytes, unquote and unquote_plus
+    # implementations from cpython 3.4.3's stdlib. Python 2's version
+    # is apparently broken (see https://github.com/rg3/youtube-dl/pull/6244)
+
+    def compat_urllib_parse_unquote_to_bytes(string):
+        """unquote_to_bytes('abc%20def') -> b'abc def'."""
+        # Note: strings are encoded as UTF-8. This is only an issue if it contains
+        # unescaped non-ASCII characters, which URIs should not.
+        if not string:
+            # Is it a string-like object?
+            string.split
+            return b''
+        if isinstance(string, unicode):
+            string = string.encode('utf-8')
+        bits = string.split(b'%')
+        if len(bits) == 1:
             return string
-        res = string.split('%')
-        if len(res) == 1:
+        res = [bits[0]]
+        append = res.append
+        for item in bits[1:]:
+            try:
+                append(compat_urllib_parse._hextochr[item[:2]])
+                append(item[2:])
+            except KeyError:
+                append(b'%')
+                append(item)
+        return b''.join(res)
+
+    def compat_urllib_parse_unquote(string, encoding='utf-8', errors='replace'):
+        """Replace %xx escapes by their single-character equivalent. The optional
+        encoding and errors parameters specify how to decode percent-encoded
+        sequences into Unicode characters, as accepted by the bytes.decode()
+        method.
+        By default, percent-encoded sequences are decoded with UTF-8, and invalid
+        sequences are replaced by a placeholder character.
+
+        unquote('abc%20def') -> 'abc def'.
+        """
+        if '%' not in string:
+            string.split
             return string
         if encoding is None:
             encoding = 'utf-8'
         if errors is None:
             errors = 'replace'
-        # pct_sequence: contiguous sequence of percent-encoded bytes, decoded
-        pct_sequence = b''
-        string = res[0]
-        for item in res[1:]:
-            try:
-                if not item:
-                    raise ValueError
-                pct_sequence += item[:2].decode('hex')
-                rest = item[2:]
-                if not rest:
-                    # This segment was just a single percent-encoded character.
-                    # May be part of a sequence of code units, so delay decoding.
-                    # (Stored in pct_sequence).
-                    continue
-            except ValueError:
-                rest = '%' + item
-            # Encountered non-percent-encoded characters. Flush the current
-            # pct_sequence.
-            string += pct_sequence.decode(encoding, errors) + rest
-            pct_sequence = b''
-        if pct_sequence:
-            # Flush the final pct_sequence
-            string += pct_sequence.decode(encoding, errors)
-        return string
+        bits = _asciire.split(string)
+        res = [bits[0]]
+        append = res.append
+        for i in range(1, len(bits), 2):
+            append(compat_urllib_parse_unquote_to_bytes(bits[i]).decode(encoding, errors))
+            append(bits[i + 1])
+        return ''.join(res)
+
+    def compat_urllib_parse_unquote_plus(string, encoding='utf-8', errors='replace'):
+        """Like unquote(), but also replace plus signs by spaces, as required for
+        unquoting HTML form values.
+
+        unquote_plus('%7e/abc+def') -> '~/abc def'
+        """
+        string = string.replace('+', ' ')
+        return compat_urllib_parse_unquote(string, encoding, errors)
+
+try:
+    compat_str = unicode  # Python 2
+except NameError:
+    compat_str = str
+
+try:
+    compat_basestring = basestring  # Python 2
+except NameError:
+    compat_basestring = str
+
+try:
+    compat_chr = unichr  # Python 2
+except NameError:
+    compat_chr = chr
+
+try:
+    from xml.etree.ElementTree import ParseError as compat_xml_parse_error
+except ImportError:  # Python 2.6
+    from xml.parsers.expat import ExpatError as compat_xml_parse_error
 
 
 try:
@@ -117,7 +178,7 @@ except ImportError:  # Python 2
 
     def _parse_qsl(qs, keep_blank_values=False, strict_parsing=False,
                    encoding='utf-8', errors='replace'):
-        qs, _coerce_result = qs, unicode
+        qs, _coerce_result = qs, compat_str
         pairs = [s2 for s1 in qs.split('&') for s2 in s1.split(';')]
         r = []
         for name_value in pairs:
@@ -155,21 +216,6 @@ except ImportError:  # Python 2
             else:
                 parsed_result[name] = [value]
         return parsed_result
-
-try:
-    compat_str = unicode  # Python 2
-except NameError:
-    compat_str = str
-
-try:
-    compat_chr = unichr  # Python 2
-except NameError:
-    compat_chr = chr
-
-try:
-    from xml.etree.ElementTree import ParseError as compat_xml_parse_error
-except ImportError:  # Python 2.6
-    from xml.parsers.expat import ExpatError as compat_xml_parse_error
 
 try:
     from shlex import quote as shlex_quote
@@ -307,6 +353,32 @@ else:
     compat_kwargs = lambda kwargs: kwargs
 
 
+if sys.version_info < (2, 7):
+    def compat_socket_create_connection(address, timeout, source_address=None):
+        host, port = address
+        err = None
+        for res in socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM):
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket.socket(af, socktype, proto)
+                sock.settimeout(timeout)
+                if source_address:
+                    sock.bind(source_address)
+                sock.connect(sa)
+                return sock
+            except socket.error as _:
+                err = _
+                if sock is not None:
+                    sock.close()
+        if err is not None:
+            raise err
+        else:
+            raise socket.error("getaddrinfo returns an empty list")
+else:
+    compat_socket_create_connection = socket.create_connection
+
+
 # Fix https://github.com/rg3/youtube-dl/issues/4223
 # See http://bugs.python.org/issue9161 for what is broken
 def workaround_optparse_bug9161():
@@ -327,26 +399,75 @@ def workaround_optparse_bug9161():
             return real_add_option(self, *bargs, **bkwargs)
         optparse.OptionGroup.add_option = _compat_add_option
 
+if hasattr(shutil, 'get_terminal_size'):  # Python >= 3.3
+    compat_get_terminal_size = shutil.get_terminal_size
+else:
+    _terminal_size = collections.namedtuple('terminal_size', ['columns', 'lines'])
+
+    def compat_get_terminal_size():
+        columns = compat_getenv('COLUMNS', None)
+        if columns:
+            columns = int(columns)
+        else:
+            columns = None
+        lines = compat_getenv('LINES', None)
+        if lines:
+            lines = int(lines)
+        else:
+            lines = None
+
+        try:
+            sp = subprocess.Popen(
+                ['stty', 'size'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = sp.communicate()
+            lines, columns = map(int, out.split())
+        except Exception:
+            pass
+        return _terminal_size(columns, lines)
+
+try:
+    itertools.count(start=0, step=1)
+    compat_itertools_count = itertools.count
+except TypeError:  # Python 2.6
+    def compat_itertools_count(start=0, step=1):
+        n = start
+        while True:
+            yield n
+            n += step
+
+if sys.version_info >= (3, 0):
+    from tokenize import tokenize as compat_tokenize_tokenize
+else:
+    from tokenize import generate_tokens as compat_tokenize_tokenize
 
 __all__ = [
     'compat_HTTPError',
+    'compat_basestring',
     'compat_chr',
     'compat_cookiejar',
+    'compat_cookies',
     'compat_expanduser',
+    'compat_get_terminal_size',
     'compat_getenv',
     'compat_getpass',
     'compat_html_entities',
-    'compat_html_parser',
     'compat_http_client',
+    'compat_http_server',
+    'compat_itertools_count',
     'compat_kwargs',
     'compat_ord',
     'compat_parse_qs',
     'compat_print',
+    'compat_socket_create_connection',
     'compat_str',
     'compat_subprocess_get_DEVNULL',
+    'compat_tokenize_tokenize',
     'compat_urllib_error',
     'compat_urllib_parse',
     'compat_urllib_parse_unquote',
+    'compat_urllib_parse_unquote_plus',
+    'compat_urllib_parse_unquote_to_bytes',
     'compat_urllib_parse_urlparse',
     'compat_urllib_request',
     'compat_urlparse',

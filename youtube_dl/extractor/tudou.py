@@ -9,7 +9,7 @@ from .common import InfoExtractor
 
 
 class TudouIE(InfoExtractor):
-    _VALID_URL = r'(?:http://)?(?:www\.)?tudou\.com/(?:listplay|programs|albumplay)/(?:view|(.+?))/(?:([^/]+)|([^/]+))(?:\.html)?'
+    _VALID_URL = r'https?://(?:www\.)?tudou\.com/(?:listplay|programs(?:/view)?|albumplay)/.*?/(?P<id>[^/?#]+?)(?:\.html)?/?(?:$|[?#])'
     _TESTS = [{
         'url': 'http://www.tudou.com/listplay/zzdE77v6Mmo/2xN2duXMxmw.html',
         'md5': '140a49ed444bd22f93330985d8475fcb',
@@ -27,14 +27,9 @@ class TudouIE(InfoExtractor):
             'title': 'La Sylphide-Bolshoi-Ekaterina Krysanova & Vyacheslav Lopatin 2012',
             'thumbnail': 're:^https?://.*\.jpg$',
         }
-    }, {
-        'url': 'http://www.tudou.com/albumplay/TenTw_JgiPM/PzsAs5usU9A.html',
-        'info_dict': {
-            'title': 'todo.mp4',
-        },
-        'add_ie': ['Youku'],
-        'skip': 'Only works from China'
     }]
+
+    _PLAYER_URL = 'http://js.tudouui.com/bin/lingtong/PortalPlayer_177.swf'
 
     def _url_for_id(self, id, quality=None):
         info_url = "http://v2.tudou.com/f?id=" + str(id)
@@ -45,8 +40,7 @@ class TudouIE(InfoExtractor):
         return final_url
 
     def _real_extract(self, url):
-        mobj = re.match(self._VALID_URL, url)
-        video_id = mobj.group(2)
+        video_id = self._match_id(url)
         webpage = self._download_webpage(url, video_id)
 
         m = re.search(r'vcode:\s*[\'"](.+?)[\'"]', webpage)
@@ -61,6 +55,10 @@ class TudouIE(InfoExtractor):
             r",kw:\s*['\"](.+?)[\"']", webpage, 'title')
         thumbnail_url = self._search_regex(
             r",pic:\s*[\"'](.+?)[\"']", webpage, 'thumbnail URL', fatal=False)
+
+        player_url = self._search_regex(
+            r"playerUrl\s*:\s*['\"](.+?\.swf)[\"']",
+            webpage, 'player URL', default=self._PLAYER_URL)
 
         segs_json = self._search_regex(r'segs: \'(.*)\'', webpage, 'segments')
         segments = json.loads(segs_json)
@@ -84,7 +82,15 @@ class TudouIE(InfoExtractor):
                 'ext': ext,
                 'title': title,
                 'thumbnail': thumbnail_url,
+                'http_headers': {
+                    'Referer': player_url,
+                },
             }
             result.append(part_info)
 
-        return result
+        return {
+            '_type': 'multi_video',
+            'entries': result,
+            'id': video_id,
+            'title': title,
+        }

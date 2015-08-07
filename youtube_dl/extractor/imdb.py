@@ -16,7 +16,6 @@ class ImdbIE(InfoExtractor):
 
     _TEST = {
         'url': 'http://www.imdb.com/video/imdb/vi2524815897',
-        'md5': '9f34fa777ade3a6e57a054fdbcb3a068',
         'info_dict': {
             'id': '2524815897',
             'ext': 'mp4',
@@ -47,7 +46,7 @@ class ImdbIE(InfoExtractor):
             format_info = info['videoPlayerObject']['video']
             formats.append({
                 'format_id': f_id,
-                'url': format_info['url'],
+                'url': format_info['videoInfoList'][0]['videoUrl'],
             })
 
         return {
