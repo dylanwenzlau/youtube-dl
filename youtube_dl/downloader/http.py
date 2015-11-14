@@ -5,6 +5,7 @@ import os
 import socket
 import time
 import re
+import sys
 
 from .common import FileDownloader
 from ..compat import (
@@ -135,7 +136,7 @@ class HttpFD(FileDownloader):
         # Imgflip --get-filesize hack
         if self.params.get('get_filesize', False):
             self.to_stdout(data_len)
-            return True
+            sys.exit(0)
 
         # Range HTTP header may be ignored/unsupported by a webserver
         # (e.g. extractor/scivee.py, extractor/bambuser.py).
