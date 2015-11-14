@@ -53,6 +53,7 @@
  - **Bandcamp:album**
  - **bbc**: BBC
  - **bbc.co.uk**: BBC iPlayer
+ - **bbc.co.uk:article**: BBC articles
  - **BeatportPro**
  - **Beeg**
  - **BehindKink**
@@ -81,16 +82,18 @@
  - **CBSSports**
  - **CeskaTelevize**
  - **channel9**: Channel 9
+ - **Chaturbate**
  - **Chilloutzone**
  - **chirbit**
  - **chirbit:profile**
  - **Cinchcast**
  - **Cinemassacre**
- - **clipfish**
+ - **Clipfish**
  - **cliphunter**
  - **Clipsyndicate**
  - **Cloudy**
  - **Clubic**
+ - **Clyp**
  - **cmt.com**
  - **CNET**
  - **CNN**
@@ -101,7 +104,7 @@
  - **ComCarCoff**
  - **ComedyCentral**
  - **ComedyCentralShows**: The Daily Show / The Colbert Report
- - **CondeNast**: Condé Nast media group: Condé Nast, GQ, Glamour, Vanity Fair, Vogue, W Magazine, WIRED
+ - **CondeNast**: Condé Nast media group: Allure, Architectural Digest, Ars Technica, Bon Appétit, Brides, Condé Nast, Condé Nast Traveler, Details, Epicurious, GQ, Glamour, Golf Digest, SELF, Teen Vogue, The New Yorker, Vanity Fair, Vogue, W Magazine, WIRED
  - **Cracked**
  - **Criterion**
  - **CrooksAndLiars**
@@ -116,12 +119,13 @@
  - **DailymotionCloud**
  - **daum.net**
  - **DBTV**
+ - **DCN**
  - **DctpTv**
  - **DeezerPlaylist**
  - **defense.gouv.fr**
+ - **democracynow**
  - **DHM**: Filmarchiv - Deutsches Historisches Museum
  - **Discovery**
- - **divxstage**: DivxStage
  - **Dotsub**
  - **DouyuTV**: 斗鱼
  - **dramafever**
@@ -149,6 +153,8 @@
  - **EroProfile**
  - **Escapist**
  - **ESPN** (Currently broken)
+ - **EsriVideo**
+ - **Europa**
  - **EveryonesMixtape**
  - **exfm**: ex.fm
  - **ExpoTV**
@@ -156,15 +162,15 @@
  - **facebook**
  - **faz.net**
  - **fc2**
+ - **Fczenit**
  - **fernsehkritik.tv**
- - **fernsehkritik.tv:postecke**
  - **Firstpost**
  - **FiveTV**
  - **Flickr**
  - **Folketinget**: Folketinget (ft.dk; Danish parliament)
  - **FootyRoom**
  - **Foxgay**
- - **FoxNews**
+ - **FoxNews**: Fox News and Fox Business Video
  - **FoxSports**
  - **france2.fr:generation-quoi**
  - **FranceCulture**
@@ -190,10 +196,10 @@
  - **Giga**
  - **Glide**: Glide mobile video messages (glide.me)
  - **Globo**
+ - **GloboArticle**
  - **GodTube**
  - **GoldenMoustache**
  - **Golem**
- - **GorillaVid**: GorillaVid.in, daclips.in, movpod.in, fastvideo.in and realvid.net
  - **Goshgay**
  - **Groupon**
  - **Hark**
@@ -207,7 +213,6 @@
  - **hitbox**
  - **hitbox:live**
  - **HornBunny**
- - **HostingBulk**
  - **HotNewHipHop**
  - **Howcast**
  - **HowStuffWorks**
@@ -218,7 +223,10 @@
  - **imdb**: Internet Movie Database trailers
  - **imdb:list**: Internet Movie Database lists
  - **Imgur**
+ - **ImgurAlbum**
  - **Ina**
+ - **Indavideo**
+ - **IndavideoEmbed**
  - **InfoQ**
  - **Instagram**
  - **instagram:user**: Instagram user profile
@@ -261,6 +269,9 @@
  - **Libsyn**
  - **life:embed**
  - **lifenews**: LIFE | NEWS
+ - **limelight**
+ - **limelight:channel**
+ - **limelight:channel_list**
  - **LiveLeak**
  - **livestream**
  - **livestream:original**
@@ -272,16 +283,15 @@
  - **macgamestore**: MacGameStore trailers
  - **mailru**: Видео@Mail.Ru
  - **Malemotion**
- - **MDR**
+ - **MDR**: MDR.DE and KiKA
  - **media.ccc.de**
- - **MegaVideoz**
  - **metacafe**
  - **Metacritic**
  - **Mgoon**
  - **Minhateca**
  - **MinistryGrid**
  - **miomio.tv**
- - **mitele.es**
+ - **MiTele**: mitele.es
  - **mixcloud**
  - **MLB**
  - **MoeVideo**: LetitBit video services: moevideo.net, playreplay.net and videochart.net
@@ -297,20 +307,21 @@
  - **Moviezine**
  - **movshare**: MovShare
  - **MPORA**
+ - **MSNBC**
  - **MTV**
+ - **mtv.de**
  - **mtviggy.com**
  - **mtvservices:embedded**
  - **MuenchenTV**: münchen.tv
  - **MusicPlayOn**
- - **MusicVault**
  - **muzu.tv**
+ - **Mwave**
  - **MySpace**
  - **MySpace:album**
  - **MySpass**
  - **Myvi**
  - **myvideo**
  - **MyVidster**
- - **N-JOY**
  - **n-tv.de**
  - **NationalGeographic**
  - **Naver**
@@ -319,7 +330,9 @@
  - **NBCNews**
  - **NBCSports**
  - **NBCSportsVPlayer**
- - **ndr**: NDR.de - Mediathek
+ - **ndr**: NDR.de - Norddeutscher Rundfunk
+ - **ndr:embed**
+ - **ndr:embed:base**
  - **NDTV**
  - **NerdCubedFeed**
  - **Nerdist**
@@ -342,15 +355,18 @@
  - **nhl.com:videocenter**: NHL videocenter category
  - **niconico**: ニコニコ動画
  - **NiconicoPlaylist**
+ - **njoy**: N-JOY
+ - **njoy:embed**
  - **Noco**
  - **Normalboots**
  - **NosVideo**
  - **Nova**: TN.cz, Prásk.tv, Nova.cz, Novaplus.cz, FANDA.tv, Krásná.cz and Doma.cz
  - **novamov**: NovaMov
- - **Nowness**
+ - **nowness**
+ - **nowness:playlist**
+ - **nowness:series**
  - **NowTV**
  - **nowvideo**: NowVideo
- - **npo**: npo.nl and ntr.nl
  - **npo**: npo.nl and ntr.nl
  - **npo.nl:live**
  - **npo.nl:radio**
@@ -369,7 +385,6 @@
  - **OnionStudios**
  - **Ooyala**
  - **OoyalaExternal**
- - **OpenFilm**
  - **orf:fm4**: radio FM4
  - **orf:iptv**: iptv.ORF.at
  - **orf:oe1**: Radio Österreich 1
@@ -377,6 +392,7 @@
  - **parliamentlive.tv**: UK parliament videos
  - **Patreon**
  - **PBS**
+ - **Periscope**: Periscope
  - **PhilharmonieDeParis**: Philharmonie de Paris
  - **Phoenix**
  - **Photobucket**
@@ -385,8 +401,11 @@
  - **PlanetaPlay**
  - **play.fm**
  - **played.to**
+ - **Playtvak**: Playtvak.cz, iDNES.cz and Lidovky.cz
  - **Playvid**
  - **Playwire**
+ - **pluralsight**
+ - **pluralsight:course**
  - **plus.google**: Google Plus
  - **pluzz.francetv.fr**
  - **podomatic**
@@ -406,6 +425,7 @@
  - **qqmusic:playlist**: QQ音乐 - 歌单
  - **qqmusic:singer**: QQ音乐 - 歌手
  - **qqmusic:toplist**: QQ音乐 - 排行榜
+ - **Quickscope**: Quick Scope
  - **QuickVid**
  - **R7**
  - **radio.de**
@@ -430,6 +450,7 @@
  - **rtve.es:alacarta**: RTVE a la carta
  - **rtve.es:infantil**: RTVE infantil
  - **rtve.es:live**: RTVE.es live streams
+ - **RTVNH**
  - **RUHD**
  - **rutube**: Rutube videos
  - **rutube:channel**: Rutube channels
@@ -453,7 +474,8 @@
  - **ServingSys**
  - **Sexu**
  - **SexyKarma**: Sexy Karma and Watch Indian Porn
- - **Shared**
+ - **Shahid**
+ - **Shared**: shared.sx and vivo.sx
  - **ShareSix**
  - **Sina**
  - **Slideshare**
@@ -496,6 +518,7 @@
  - **SSA**
  - **stanfordoc**: Stanford Open ClassRoom
  - **Steam**
+ - **Stitcher**
  - **streamcloud.eu**
  - **StreamCZ**
  - **StreetVoice**
@@ -517,7 +540,8 @@
  - **techtv.mit.edu**
  - **ted**
  - **TeleBruxelles**
- - **telecinco.es**
+ - **Telecinco**: telecinco.es, cuatro.com and mediaset.es
+ - **Telegraaf**
  - **TeleMB**
  - **TeleTask**
  - **TenPlay**
@@ -525,6 +549,7 @@
  - **TF1**
  - **TheOnion**
  - **ThePlatform**
+ - **ThePlatformFeed**
  - **TheSixtyOne**
  - **ThisAmericanLife**
  - **ThisAV**
@@ -567,7 +592,8 @@
  - **twitch:stream**
  - **twitch:video**
  - **twitch:vod**
- - **TwitterCard**
+ - **twitter**
+ - **twitter:card**
  - **Ubu**
  - **udemy**
  - **udemy:course**
@@ -590,10 +616,8 @@
  - **Viddler**
  - **video.google:search**: Google Video search
  - **video.mit.edu**
- - **VideoBam**
  - **VideoDetective**
  - **videofy.me**
- - **videolectures.net**
  - **VideoMega**
  - **VideoPremium**
  - **VideoTt**: video.tt - Your True Tube
@@ -603,6 +627,7 @@
  - **vier**
  - **vier:videos**
  - **Viewster**
+ - **Viidea**
  - **viki**
  - **viki:channel**
  - **vimeo**
@@ -618,9 +643,11 @@
  - **vine:user**
  - **vk**: VK
  - **vk:uservideos**: VK - User's Videos
+ - **vlive**
  - **Vodlocker**
  - **VoiceRepublic**
  - **Vporn**
+ - **vpro**: npo.nl and ntr.nl
  - **VRT**
  - **vube**: Vube.com
  - **VuClip**
@@ -643,6 +670,7 @@
  - **WSJ**: Wall Street Journal
  - **XBef**
  - **XboxClips**
+ - **XFileShare**: XFileShare based sites: GorillaVid.in, daclips.in, movpod.in, fastvideo.in, realvid.net, filehoot.com and vidto.me
  - **XHamster**
  - **XHamsterEmbed**
  - **XMinus**

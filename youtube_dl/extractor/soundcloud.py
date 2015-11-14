@@ -113,7 +113,7 @@ class SoundcloudIE(InfoExtractor):
         },
     ]
 
-    _CLIENT_ID = 'b45b1aa10f1ac2941910a7f0d10f8e28'
+    _CLIENT_ID = '02gUJC0hH2ct1EGOcYXQIzRFU91c72Ea'
     _IPHONE_CLIENT_ID = '376f225bf427445fc4bfb6b99b72e0bf'
 
     def report_resolve(self, video_id):
@@ -309,7 +309,7 @@ class SoundcloudUserIE(SoundcloudIE):
             'id': '114582580',
             'title': 'The Akashic Chronicler (All)',
         },
-        'playlist_mincount': 112,
+        'playlist_mincount': 111,
     }, {
         'url': 'https://soundcloud.com/the-akashic-chronicler/tracks',
         'info_dict': {
@@ -330,14 +330,14 @@ class SoundcloudUserIE(SoundcloudIE):
             'id': '114582580',
             'title': 'The Akashic Chronicler (Reposts)',
         },
-        'playlist_mincount': 9,
+        'playlist_mincount': 7,
     }, {
         'url': 'https://soundcloud.com/the-akashic-chronicler/likes',
         'info_dict': {
             'id': '114582580',
             'title': 'The Akashic Chronicler (Likes)',
         },
-        'playlist_mincount': 333,
+        'playlist_mincount': 321,
     }, {
         'url': 'https://soundcloud.com/grynpyret/spotlight',
         'info_dict': {
