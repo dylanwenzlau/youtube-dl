@@ -43,7 +43,7 @@ class FileDownloader(object):
     max_filesize:       Skip files larger than this size
     get_filesize:       Simulate quietly and print video filesize
     xattr_set_filesize: Set ytdl.filesize user xattribute with expected size.
-                        (experimenatal)
+                        (experimental)
     external_downloader_args:  A list of additional command-line arguments for the
                         external downloader.
 

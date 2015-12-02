@@ -67,7 +67,8 @@
  - **Bpb**: Bundeszentrale für politische Bildung
  - **BR**: Bayerischer Rundfunk Mediathek
  - **Break**
- - **Brightcove**
+ - **brightcove:legacy**
+ - **brightcove:new**
  - **bt:article**: Bergens Tidende Articles
  - **bt:vestlendingen**: Bergens Tidende - Vestlendingen
  - **BuzzFeed**
@@ -128,6 +129,7 @@
  - **Discovery**
  - **Dotsub**
  - **DouyuTV**: 斗鱼
+ - **DPlay**
  - **dramafever**
  - **dramafever:series**
  - **DRBonanza**
@@ -366,6 +368,7 @@
  - **nowness:playlist**
  - **nowness:series**
  - **NowTV**
+ - **NowTVList**
  - **nowvideo**: NowVideo
  - **npo**: npo.nl and ntr.nl
  - **npo.nl:live**
@@ -425,7 +428,6 @@
  - **qqmusic:playlist**: QQ音乐 - 歌单
  - **qqmusic:singer**: QQ音乐 - 歌手
  - **qqmusic:toplist**: QQ音乐 - 排行榜
- - **Quickscope**: Quick Scope
  - **QuickVid**
  - **R7**
  - **radio.de**
@@ -492,6 +494,7 @@
  - **soompi:show**
  - **soundcloud**
  - **soundcloud:playlist**
+ - **soundcloud:search**: Soundcloud search
  - **soundcloud:set**
  - **soundcloud:user**
  - **soundgasm**
@@ -705,6 +708,7 @@
  - **youtube:show**: YouTube.com (multi-season) shows
  - **youtube:subscriptions**: YouTube.com subscriptions feed, "ytsubs" keyword (requires authentication)
  - **youtube:user**: YouTube.com user videos (URL or "ytuser" keyword)
+ - **youtube:user:playlists**: YouTube.com user playlists
  - **youtube:watchlater**: Youtube watch later list, ":ytwatchlater" for short (requires authentication)
  - **Zapiks**
  - **ZDF**

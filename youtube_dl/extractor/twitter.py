@@ -4,13 +4,13 @@ from __future__ import unicode_literals
 import re
 
 from .common import InfoExtractor
-from ..compat import compat_urllib_request
 from ..utils import (
     float_or_none,
     xpath_text,
     remove_end,
     int_or_none,
     ExtractorError,
+    sanitized_Request,
 )
 
 
@@ -52,6 +52,20 @@ class TwitterCardIE(InfoExtractor):
                 'uploader': 'OMG! Ubuntu!',
                 'uploader_id': 'omgubuntu',
             },
+            'add_ie': ['Youtube'],
+        },
+        {
+            'url': 'https://twitter.com/i/cards/tfw/v1/665289828897005568',
+            'md5': 'ab2745d0b0ce53319a534fccaa986439',
+            'info_dict': {
+                'id': 'iBb2x00UVlv',
+                'ext': 'mp4',
+                'upload_date': '20151113',
+                'uploader_id': '1189339351084113920',
+                'uploader': '@ArsenalTerje',
+                'title': 'Vine by @ArsenalTerje',
+            },
+            'add_ie': ['Vine'],
         }
     ]
 
@@ -67,15 +81,15 @@ class TwitterCardIE(InfoExtractor):
         config = None
         formats = []
         for user_agent in USER_AGENTS:
-            request = compat_urllib_request.Request(url)
+            request = sanitized_Request(url)
             request.add_header('User-Agent', user_agent)
             webpage = self._download_webpage(request, video_id)
 
-            youtube_url = self._html_search_regex(
-                r'<iframe[^>]+src="((?:https?:)?//www.youtube.com/embed/[^"]+)"',
-                webpage, 'youtube iframe', default=None)
-            if youtube_url:
-                return self.url_result(youtube_url, 'Youtube')
+            iframe_url = self._html_search_regex(
+                r'<iframe[^>]+src="((?:https?:)?//(?:www.youtube.com/embed/[^"]+|(?:www\.)?vine\.co/v/\w+/card))"',
+                webpage, 'video iframe', default=None)
+            if iframe_url:
+                return self.url_result(iframe_url)
 
             config = self._parse_json(self._html_search_regex(
                 r'data-player-config="([^"]+)"', webpage, 'data player config'),

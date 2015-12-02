@@ -132,6 +132,7 @@ from .dfb import DFBIE
 from .dhm import DHMIE
 from .dotsub import DotsubIE
 from .douyutv import DouyuTVIE
+from .dplay import DPlayIE
 from .dramafever import (
     DramaFeverIE,
     DramaFeverSeriesIE,
@@ -420,7 +421,10 @@ from .nowness import (
     NownessPlaylistIE,
     NownessSeriesIE,
 )
-from .nowtv import NowTVIE
+from .nowtv import (
+    NowTVIE,
+    NowTVListIE,
+)
 from .nowvideo import NowVideoIE
 from .npo import (
     NPOIE,
@@ -458,10 +462,7 @@ from .orf import (
 from .parliamentliveuk import ParliamentLiveUKIE
 from .patreon import PatreonIE
 from .pbs import PBSIE
-from .periscope import (
-    PeriscopeIE,
-    QuickscopeIE,
-)
+from .periscope import PeriscopeIE
 from .philharmoniedeparis import PhilharmonieDeParisIE
 from .phoenix import PhoenixIE
 from .photobucket import PhotobucketIE
@@ -575,7 +576,8 @@ from .soundcloud import (
     SoundcloudIE,
     SoundcloudSetIE,
     SoundcloudUserIE,
-    SoundcloudPlaylistIE
+    SoundcloudPlaylistIE,
+    SoundcloudSearchIE
 )
 from .soundgasm import (
     SoundgasmIE,
@@ -832,6 +834,7 @@ from .youtube import (
     YoutubeTruncatedIDIE,
     YoutubeTruncatedURLIE,
     YoutubeUserIE,
+    YoutubeUserPlaylistsIE,
     YoutubeWatchLaterIE,
 )
 from .zapiks import ZapiksIE
