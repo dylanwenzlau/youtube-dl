@@ -380,7 +380,7 @@ def parseOpts(overrideArguments=None):
         '--sub-lang', '--sub-langs', '--srt-lang',
         action='callback', dest='subtitleslangs', metavar='LANGS', type='str',
         default=[], callback=_comma_separated_values_options_callback,
-        help='Languages of the subtitles to download (optional) separated by commas, use IETF language tags like \'en,pt\'')
+        help='Languages of the subtitles to download (optional) separated by commas, use --list-subs for available language tags')
 
     downloader = optparse.OptionGroup(parser, 'Download Options')
     downloader.add_option(
@@ -415,6 +415,11 @@ def parseOpts(overrideArguments=None):
         '--hls-prefer-native',
         dest='hls_prefer_native', action='store_true',
         help='Use the native HLS downloader instead of ffmpeg (experimental)')
+    downloader.add_option(
+        '--hls-use-mpegts',
+        dest='hls_use_mpegts', action='store_true',
+        help='Use the mpegts container for HLS videos, allowing to play the '
+             'video while downloading (some players may not be able to play it)')
     downloader.add_option(
         '--external-downloader',
         dest='external_downloader', metavar='COMMAND',
@@ -756,7 +761,7 @@ def parseOpts(overrideArguments=None):
         metavar='CMD', dest='exec_cmd',
         help='Execute a command on the file after downloading, similar to find\'s -exec syntax. Example: --exec \'adb push {} /sdcard/Music/ && rm {}\'')
     postproc.add_option(
-        '--convert-subtitles', '--convert-subs',
+        '--convert-subs', '--convert-subtitles',
         metavar='FORMAT', dest='convertsubtitles', default=None,
         help='Convert the subtitles to other format (currently supported: srt|ass|vtt)')
 

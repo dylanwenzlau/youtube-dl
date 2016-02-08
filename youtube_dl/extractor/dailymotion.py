@@ -7,10 +7,10 @@ import itertools
 
 from .common import InfoExtractor
 
-from ..compat import compat_str
 from ..utils import (
-    ExtractorError,
     determine_ext,
+    error_to_compat_str,
+    ExtractorError,
     int_or_none,
     parse_iso8601,
     sanitized_Request,
@@ -37,7 +37,7 @@ class DailymotionBaseInfoExtractor(InfoExtractor):
 
 
 class DailymotionIE(DailymotionBaseInfoExtractor):
-    _VALID_URL = r'(?i)(?:https?://)?(?:(www|touch)\.)?dailymotion\.[a-z]{2,3}/(?:(embed|#)/)?video/(?P<id>[^/?_]+)'
+    _VALID_URL = r'(?i)(?:https?://)?(?:(www|touch)\.)?dailymotion\.[a-z]{2,3}/(?:(?:embed|swf|#)/)?video/(?P<id>[^/?_]+)'
     IE_NAME = 'dailymotion'
 
     _FORMATS = [
@@ -104,6 +104,10 @@ class DailymotionIE(DailymotionBaseInfoExtractor):
         {
             'url': 'http://www.dailymotion.com/video/x20su5f_the-power-of-nightmares-1-the-rise-of-the-politics-of-fear-bbc-2004_news',
             'only_matching': True,
+        },
+        {
+            'url': 'http://www.dailymotion.com/swf/video/x3n92nf',
+            'only_matching': True,
         }
     ]
 
@@ -148,19 +152,16 @@ class DailymotionIE(DailymotionBaseInfoExtractor):
                         continue
                     ext = determine_ext(media_url)
                     if type_ == 'application/x-mpegURL' or ext == 'm3u8':
-                        m3u8_formats = self._extract_m3u8_formats(
-                            media_url, video_id, 'mp4', m3u8_id='hls', fatal=False)
-                        if m3u8_formats:
-                            formats.extend(m3u8_formats)
+                        formats.extend(self._extract_m3u8_formats(
+                            media_url, video_id, 'mp4', preference=-1,
+                            m3u8_id='hls', fatal=False))
                     elif type_ == 'application/f4m' or ext == 'f4m':
-                        f4m_formats = self._extract_f4m_formats(
-                            media_url, video_id, preference=-1, f4m_id='hds', fatal=False)
-                        if f4m_formats:
-                            formats.extend(f4m_formats)
+                        formats.extend(self._extract_f4m_formats(
+                            media_url, video_id, preference=-1, f4m_id='hds', fatal=False))
                     else:
                         f = {
                             'url': media_url,
-                            'format_id': quality,
+                            'format_id': 'http-%s' % quality,
                         }
                         m = re.search(r'H264-(?P<width>\d+)x(?P<height>\d+)', media_url)
                         if m:
@@ -278,7 +279,7 @@ class DailymotionIE(DailymotionBaseInfoExtractor):
                 'https://api.dailymotion.com/video/%s/subtitles?fields=id,language,url' % video_id,
                 video_id, note=False)
         except ExtractorError as err:
-            self._downloader.report_warning('unable to download video subtitles: %s' % compat_str(err))
+            self._downloader.report_warning('unable to download video subtitles: %s' % error_to_compat_str(err))
             return {}
         info = json.loads(sub_list)
         if (info['total'] > 0):
@@ -339,7 +340,7 @@ class DailymotionPlaylistIE(DailymotionBaseInfoExtractor):
 
 class DailymotionUserIE(DailymotionPlaylistIE):
     IE_NAME = 'dailymotion:user'
-    _VALID_URL = r'https?://(?:www\.)?dailymotion\.[a-z]{2,3}/(?!(?:embed|#|video|playlist)/)(?:(?:old/)?user/)?(?P<user>[^/]+)'
+    _VALID_URL = r'https?://(?:www\.)?dailymotion\.[a-z]{2,3}/(?!(?:embed|swf|#|video|playlist)/)(?:(?:old/)?user/)?(?P<user>[^/]+)'
     _PAGE_TEMPLATE = 'http://www.dailymotion.com/user/%s/%s'
     _TESTS = [{
         'url': 'https://www.dailymotion.com/user/nqtv',

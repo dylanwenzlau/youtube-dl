@@ -70,6 +70,21 @@ ENGLISH_MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December']
 
+KNOWN_EXTENSIONS = (
+    'mp4', 'm4a', 'm4p', 'm4b', 'm4r', 'm4v', 'aac',
+    'flv', 'f4v', 'f4a', 'f4b',
+    'webm', 'ogg', 'ogv', 'oga', 'ogx', 'spx', 'opus',
+    'mkv', 'mka', 'mk3d',
+    'avi', 'divx',
+    'mov',
+    'asf', 'wmv', 'wma',
+    '3gp', '3g2',
+    'mp3',
+    'flac',
+    'ape',
+    'wav',
+    'f4f', 'f4m', 'm3u8', 'smil')
+
 
 def preferredencoding():
     """Get preferred encoding.
@@ -773,11 +788,13 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
                     raise original_ioerror
             resp = self.addinfourl_wrapper(uncompressed, old_resp.headers, old_resp.url, old_resp.code)
             resp.msg = old_resp.msg
+            del resp.headers['Content-encoding']
         # deflate
         if resp.headers.get('Content-encoding', '') == 'deflate':
             gz = io.BytesIO(self.deflate(resp.read()))
             resp = self.addinfourl_wrapper(gz, old_resp.headers, old_resp.url, old_resp.code)
             resp.msg = old_resp.msg
+            del resp.headers['Content-encoding']
         # Percent-encode redirect URL of Location HTTP header to satisfy RFC 3986 (see
         # https://github.com/rg3/youtube-dl/issues/6457).
         if 300 <= resp.code < 400:
@@ -940,20 +957,8 @@ def determine_ext(url, default_ext='unknown_video'):
     guess = url.partition('?')[0].rpartition('.')[2]
     if re.match(r'^[A-Za-z0-9]+$', guess):
         return guess
-    elif guess.rstrip('/') in (
-            'mp4', 'm4a', 'm4p', 'm4b', 'm4r', 'm4v', 'aac',
-            'flv', 'f4v', 'f4a', 'f4b',
-            'webm', 'ogg', 'ogv', 'oga', 'ogx', 'spx', 'opus',
-            'mkv', 'mka', 'mk3d',
-            'avi', 'divx',
-            'mov',
-            'asf', 'wmv', 'wma',
-            '3gp', '3g2',
-            'mp3',
-            'flac',
-            'ape',
-            'wav',
-            'f4f', 'f4m', 'm3u8', 'smil'):
+    # Try extract ext from URLs like http://example.com/foo/bar.mp4/?download
+    elif guess.rstrip('/') in KNOWN_EXTENSIONS:
         return guess.rstrip('/')
     else:
         return default_ext
@@ -979,7 +984,7 @@ def date_from_str(date_str):
         if sign == '-':
             time = -time
         unit = match.group('unit')
-        # A bad aproximation?
+        # A bad approximation?
         if unit == 'month':
             unit = 'day'
             time *= 30
@@ -1302,7 +1307,7 @@ def parse_filesize(s):
     if s is None:
         return None
 
-    # The lower-case forms are of course incorrect and inofficial,
+    # The lower-case forms are of course incorrect and unofficial,
     # but we support those too
     _UNIT_TABLE = {
         'B': 1,
@@ -1712,6 +1717,20 @@ def encode_dict(d, encoding='utf-8'):
     return dict((encode(k), encode(v)) for k, v in d.items())
 
 
+def dict_get(d, key_or_keys, default=None, skip_false_values=True):
+    if isinstance(key_or_keys, (list, tuple)):
+        for key in key_or_keys:
+            if key not in d or d[key] is None or skip_false_values and not d[key]:
+                continue
+            return d[key]
+        return default
+    return d.get(key_or_keys, default)
+
+
+def encode_compat_str(string, encoding=preferredencoding(), errors='strict'):
+    return string if isinstance(string, compat_str) else compat_str(string, encoding, errors)
+
+
 US_RATINGS = {
     'G': 0,
     'PG': 10,
@@ -1730,7 +1749,7 @@ def parse_age_limit(s):
 
 def strip_jsonp(code):
     return re.sub(
-        r'(?s)^[a-zA-Z0-9_]+\s*\(\s*(.*)\);?\s*?(?://[^\n]*)*$', r'\1', code)
+        r'(?s)^[a-zA-Z0-9_.]+\s*\(\s*(.*)\);?\s*?(?://[^\n]*)*$', r'\1', code)
 
 
 def js_to_json(code):
@@ -1806,13 +1825,24 @@ def args_to_str(args):
     return ' '.join(shlex_quote(a) for a in args)
 
 
+def error_to_compat_str(err):
+    err_str = str(err)
+    # On python 2 error byte string must be decoded with proper
+    # encoding rather than ascii
+    if sys.version_info[0] < 3:
+        err_str = err_str.decode(preferredencoding())
+    return err_str
+
+
 def mimetype2ext(mt):
     _, _, res = mt.rpartition('/')
 
     return {
-        'x-ms-wmv': 'wmv',
-        'x-mp4-fragmented': 'mp4',
+        '3gpp': '3gp',
         'ttml+xml': 'ttml',
+        'x-flv': 'flv',
+        'x-mp4-fragmented': 'mp4',
+        'x-ms-wmv': 'wmv',
     }.get(res, res)
 
 
@@ -1997,20 +2027,27 @@ def dfxp2srt(dfxp_data):
         'ttaf1': 'http://www.w3.org/2006/10/ttaf1',
     })
 
+    class TTMLPElementParser(object):
+        out = ''
+
+        def start(self, tag, attrib):
+            if tag in (_x('ttml:br'), _x('ttaf1:br'), 'br'):
+                self.out += '\n'
+
+        def end(self, tag):
+            pass
+
+        def data(self, data):
+            self.out += data
+
+        def close(self):
+            return self.out.strip()
+
     def parse_node(node):
-        str_or_empty = functools.partial(str_or_none, default='')
-
-        out = str_or_empty(node.text)
-
-        for child in node:
-            if child.tag in (_x('ttml:br'), _x('ttaf1:br'), 'br'):
-                out += '\n' + str_or_empty(child.tail)
-            elif child.tag in (_x('ttml:span'), _x('ttaf1:span'), 'span'):
-                out += str_or_empty(parse_node(child))
-            else:
-                out += str_or_empty(xml.etree.ElementTree.tostring(child))
-
-        return out
+        target = TTMLPElementParser()
+        parser = xml.etree.ElementTree.XMLParser(target=target)
+        parser.feed(xml.etree.ElementTree.tostring(node))
+        return parser.close()
 
     dfxp = compat_etree_fromstring(dfxp_data.encode('utf-8'))
     out = []

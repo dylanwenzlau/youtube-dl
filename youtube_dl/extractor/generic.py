@@ -44,7 +44,6 @@ from .myvi import MyviIE
 from .condenast import CondeNastIE
 from .udn import UDNEmbedIE
 from .senateisvp import SenateISVPIE
-from .bliptv import BlipTVIE
 from .svt import SVTIE
 from .pornhub import PornHubIE
 from .xhamster import XHamsterEmbedIE
@@ -55,6 +54,10 @@ from .snagfilms import SnagFilmsEmbedIE
 from .screenwavemedia import ScreenwaveMediaIE
 from .mtv import MTVServicesEmbeddedIE
 from .pladform import PladformIE
+from .videomore import VideomoreIE
+from .googledrive import GoogleDriveIE
+from .jwplatform import JWPlatformIE
+from .digiteka import DigitekaIE
 
 
 class GenericIE(InfoExtractor):
@@ -484,7 +487,7 @@ class GenericIE(InfoExtractor):
                 'description': 'md5:8145d19d320ff3e52f28401f4c4283b9',
             }
         },
-        # Embeded Ustream video
+        # Embedded Ustream video
         {
             'url': 'http://www.american.edu/spa/pti/nsa-privacy-janus-2014.cfm',
             'md5': '27b99cdb639c9b12a79bca876a073417',
@@ -1226,19 +1229,24 @@ class GenericIE(InfoExtractor):
 
         # Check for direct link to a video
         content_type = head_response.headers.get('Content-Type', '')
-        m = re.match(r'^(?P<type>audio|video|application(?=/ogg$))/(?P<format_id>.+)$', content_type)
+        m = re.match(r'^(?P<type>audio|video|application(?=/(?:ogg$|(?:vnd\.apple\.|x-)?mpegurl)))/(?P<format_id>.+)$', content_type)
         if m:
             upload_date = unified_strdate(
                 head_response.headers.get('Last-Modified'))
+            formats = []
+            if m.group('format_id').endswith('mpegurl'):
+                formats = self._extract_m3u8_formats(url, video_id, 'mp4')
+            else:
+                formats = [{
+                    'format_id': m.group('format_id'),
+                    'url': url,
+                    'vcodec': 'none' if m.group('type') == 'audio' else None
+                }]
             return {
                 'id': video_id,
                 'title': compat_urllib_parse_unquote(os.path.splitext(url_basename(url))[0]),
                 'direct': True,
-                'formats': [{
-                    'format_id': m.group('format_id'),
-                    'url': url,
-                    'vcodec': 'none' if m.group('type') == 'audio' else None
-                }],
+                'formats': formats,
                 'upload_date': upload_date,
             }
 
@@ -1281,7 +1289,7 @@ class GenericIE(InfoExtractor):
 
         self.report_extraction(video_id)
 
-        # Is it an RSS feed, a SMIL file or a XSPF playlist?
+        # Is it an RSS feed, a SMIL file, an XSPF playlist or a MPD manifest?
         try:
             doc = compat_etree_fromstring(webpage.encode('utf-8'))
             if doc.tag == 'rss':
@@ -1290,6 +1298,12 @@ class GenericIE(InfoExtractor):
                 return self._parse_smil(doc, url, video_id)
             elif doc.tag == '{http://xspf.org/ns/0/}playlist':
                 return self.playlist_result(self._parse_xspf(doc, video_id), video_id)
+            elif re.match(r'(?i)^(?:{[^}]+})?MPD$', doc.tag):
+                return {
+                    'id': video_id,
+                    'title': compat_urllib_parse_unquote(os.path.splitext(url_basename(url))[0]),
+                    'formats': self._parse_mpd_formats(doc, video_id),
+                }
         except compat_xml_parse_error:
             pass
 
@@ -1399,7 +1413,7 @@ class GenericIE(InfoExtractor):
 
         # Look for embedded Dailymotion player
         matches = re.findall(
-            r'<iframe[^>]+?src=(["\'])(?P<url>(?:https?:)?//(?:www\.)?dailymotion\.com/embed/video/.+?)\1', webpage)
+            r'<(?:embed|iframe)[^>]+?src=(["\'])(?P<url>(?:https?:)?//(?:www\.)?dailymotion\.com/(?:embed|swf)/video/.+?)\1', webpage)
         if matches:
             return _playlist_from_matches(
                 matches, lambda m: unescapeHTML(m[1]))
@@ -1439,11 +1453,6 @@ class GenericIE(InfoExtractor):
                 'title': video_title,
                 'id': match.group('id')
             }
-
-        # Look for embedded blip.tv player
-        bliptv_url = BlipTVIE._extract_url(webpage)
-        if bliptv_url:
-            return self.url_result(bliptv_url, 'BlipTV')
 
         # Look for SVT player
         svt_url = SVTIE._extract_url(webpage)
@@ -1646,7 +1655,7 @@ class GenericIE(InfoExtractor):
         if myvi_url:
             return self.url_result(myvi_url)
 
-        # Look for embeded soundcloud player
+        # Look for embedded soundcloud player
         mobj = re.search(
             r'<iframe\s+(?:[a-zA-Z0-9_-]+="[^"]+"\s+)*src="(?P<url>https?://(?:w\.)?soundcloud\.com/player[^"]+)"',
             webpage)
@@ -1746,6 +1755,11 @@ class GenericIE(InfoExtractor):
         if pladform_url:
             return self.url_result(pladform_url)
 
+        # Look for Videomore embeds
+        videomore_url = VideomoreIE._extract_url(webpage)
+        if videomore_url:
+            return self.url_result(videomore_url)
+
         # Look for Playwire embeds
         mobj = re.search(
             r'<script[^>]+data-config=(["\'])(?P<url>(?:https?:)?//config\.playwire\.com/.+?)\1', webpage)
@@ -1768,6 +1782,11 @@ class GenericIE(InfoExtractor):
         nbc_sports_url = NBCSportsVPlayerIE._extract_url(webpage)
         if nbc_sports_url:
             return self.url_result(nbc_sports_url, 'NBCSportsVPlayer')
+
+        # Look for Google Drive embeds
+        google_drive_url = GoogleDriveIE._extract_url(webpage)
+        if google_drive_url:
+            return self.url_result(google_drive_url, 'GoogleDrive')
 
         # Look for UDN embeds
         mobj = re.search(
@@ -1796,10 +1815,31 @@ class GenericIE(InfoExtractor):
         if snagfilms_url:
             return self.url_result(snagfilms_url)
 
+        # Look for JWPlatform embeds
+        jwplatform_url = JWPlatformIE._extract_url(webpage)
+        if jwplatform_url:
+            return self.url_result(jwplatform_url, 'JWPlatform')
+
         # Look for ScreenwaveMedia embeds
         mobj = re.search(ScreenwaveMediaIE.EMBED_PATTERN, webpage)
         if mobj is not None:
             return self.url_result(unescapeHTML(mobj.group('url')), 'ScreenwaveMedia')
+
+        # Look for Digiteka embeds
+        digiteka_url = DigitekaIE._extract_url(webpage)
+        if digiteka_url:
+            return self.url_result(self._proto_relative_url(digiteka_url), DigitekaIE.ie_key())
+
+        # Look for Limelight embeds
+        mobj = re.search(r'LimelightPlayer\.doLoad(Media|Channel|ChannelList)\(["\'](?P<id>[a-z0-9]{32})', webpage)
+        if mobj:
+            lm = {
+                'Media': 'media',
+                'Channel': 'channel',
+                'ChannelList': 'channel_list',
+            }
+            return self.url_result('limelight:%s:%s' % (
+                lm[mobj.group(1)], mobj.group(2)), 'Limelight%s' % mobj.group(1), mobj.group(2))
 
         # Look for AdobeTVVideo embeds
         mobj = re.search(
@@ -1917,6 +1957,8 @@ class GenericIE(InfoExtractor):
                 return self.playlist_result(self._extract_xspf_playlist(video_url, video_id), video_id)
             elif ext == 'm3u8':
                 entry_info_dict['formats'] = self._extract_m3u8_formats(video_url, video_id, ext='mp4')
+            elif ext == 'mpd':
+                entry_info_dict['formats'] = self._extract_mpd_formats(video_url, video_id)
             else:
                 entry_info_dict['url'] = video_url
 

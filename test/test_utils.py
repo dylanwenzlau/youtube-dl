@@ -22,6 +22,8 @@ from youtube_dl.utils import (
     DateRange,
     detect_exe_version,
     determine_ext,
+    dict_get,
+    encode_compat_str,
     encodeFilename,
     escape_rfc3986,
     escape_url,
@@ -449,6 +451,32 @@ class TestUtil(unittest.TestCase):
         data = urlencode_postdata({'username': 'foo@bar.com', 'password': '1234'})
         self.assertTrue(isinstance(data, bytes))
 
+    def test_dict_get(self):
+        FALSE_VALUES = {
+            'none': None,
+            'false': False,
+            'zero': 0,
+            'empty_string': '',
+            'empty_list': [],
+        }
+        d = FALSE_VALUES.copy()
+        d['a'] = 42
+        self.assertEqual(dict_get(d, 'a'), 42)
+        self.assertEqual(dict_get(d, 'b'), None)
+        self.assertEqual(dict_get(d, 'b', 42), 42)
+        self.assertEqual(dict_get(d, ('a', )), 42)
+        self.assertEqual(dict_get(d, ('b', 'a', )), 42)
+        self.assertEqual(dict_get(d, ('b', 'c', 'a', 'd', )), 42)
+        self.assertEqual(dict_get(d, ('b', 'c', )), None)
+        self.assertEqual(dict_get(d, ('b', 'c', ), 42), 42)
+        for key, false_value in FALSE_VALUES.items():
+            self.assertEqual(dict_get(d, ('b', 'c', key, )), None)
+            self.assertEqual(dict_get(d, ('b', 'c', key, ), skip_false_values=False), false_value)
+
+    def test_encode_compat_str(self):
+        self.assertEqual(encode_compat_str(b'\xd1\x82\xd0\xb5\xd1\x81\xd1\x82', 'utf-8'), 'тест')
+        self.assertEqual(encode_compat_str('тест', 'utf-8'), 'тест')
+
     def test_parse_iso8601(self):
         self.assertEqual(parse_iso8601('2014-03-23T23:04:26+0100'), 1395612266)
         self.assertEqual(parse_iso8601('2014-03-23T22:04:26+0000'), 1395612266)
@@ -465,6 +493,10 @@ class TestUtil(unittest.TestCase):
         stripped = strip_jsonp('parseMetadata({"STATUS":"OK"})\n\n\n//epc')
         d = json.loads(stripped)
         self.assertEqual(d, {'STATUS': 'OK'})
+
+        stripped = strip_jsonp('ps.embedHandler({"status": "success"});')
+        d = json.loads(stripped)
+        self.assertEqual(d, {'status': 'success'})
 
     def test_uppercase_escape(self):
         self.assertEqual(uppercase_escape('aä'), 'aä')
