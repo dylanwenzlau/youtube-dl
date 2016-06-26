@@ -2,13 +2,15 @@
 from __future__ import unicode_literals
 
 from .common import InfoExtractor
-from .theplatform import ThePlatformIE
-from ..utils import parse_duration
+from .cbs import CBSBaseIE
+from ..utils import (
+    parse_duration,
+)
 
 
-class CBSNewsIE(ThePlatformIE):
+class CBSNewsIE(CBSBaseIE):
     IE_DESC = 'CBS News'
-    _VALID_URL = r'http://(?:www\.)?cbsnews\.com/(?:news|videos)/(?P<id>[\da-z_-]+)'
+    _VALID_URL = r'https?://(?:www\.)?cbsnews\.com/(?:news|videos)/(?P<id>[\da-z_-]+)'
 
     _TESTS = [
         {
@@ -28,9 +30,12 @@ class CBSNewsIE(ThePlatformIE):
         {
             'url': 'http://www.cbsnews.com/videos/fort-hood-shooting-army-downplays-mental-illness-as-cause-of-attack/',
             'info_dict': {
-                'id': 'fort-hood-shooting-army-downplays-mental-illness-as-cause-of-attack',
+                'id': 'SNJBOYzXiWBOvaLsdzwH8fmtP1SCd91Y',
                 'ext': 'mp4',
                 'title': 'Fort Hood shooting: Army downplays mental illness as cause of attack',
+                'description': 'md5:4a6983e480542d8b333a947bfc64ddc7',
+                'upload_date': '19700101',
+                'uploader': 'CBSI-NEW',
                 'thumbnail': 're:^https?://.*\.jpg$',
                 'duration': 205,
                 'subtitles': {
@@ -56,41 +61,13 @@ class CBSNewsIE(ThePlatformIE):
             webpage, 'video JSON info'), video_id)
 
         item = video_info['item'] if 'item' in video_info else video_info
-        title = item.get('articleTitle') or item.get('hed')
-        duration = item.get('duration')
-        thumbnail = item.get('mediaImage') or item.get('thumbnail')
-
-        subtitles = {}
-        if 'mpxRefId' in video_info:
-            subtitles['en'] = [{
-                'ext': 'ttml',
-                'url': 'http://www.cbsnews.com/videos/captions/%s.adb_xml' % video_info['mpxRefId'],
-            }]
-
-        formats = []
-        for format_id in ['RtmpMobileLow', 'RtmpMobileHigh', 'Hls', 'RtmpDesktop']:
-            pid = item.get('media' + format_id)
-            if not pid:
-                continue
-            release_url = 'http://link.theplatform.com/s/dJ5BDC/%s?format=SMIL&mbr=true' % pid
-            tp_formats, tp_subtitles = self._extract_theplatform_smil(release_url, video_id, 'Downloading %s SMIL data' % pid)
-            formats.extend(tp_formats)
-            subtitles = self._merge_subtitles(subtitles, tp_subtitles)
-        self._sort_formats(formats)
-
-        return {
-            'id': video_id,
-            'title': title,
-            'thumbnail': thumbnail,
-            'duration': duration,
-            'formats': formats,
-            'subtitles': subtitles,
-        }
+        guid = item['mpxRefId']
+        return self._extract_video_info('byGuid=%s' % guid, guid)
 
 
 class CBSNewsLiveVideoIE(InfoExtractor):
     IE_DESC = 'CBS News Live Videos'
-    _VALID_URL = r'http://(?:www\.)?cbsnews\.com/live/video/(?P<id>[\da-z_-]+)'
+    _VALID_URL = r'https?://(?:www\.)?cbsnews\.com/live/video/(?P<id>[\da-z_-]+)'
 
     _TEST = {
         'url': 'http://www.cbsnews.com/live/video/clinton-sanders-prepare-to-face-off-in-nh/',
@@ -116,6 +93,7 @@ class CBSNewsLiveVideoIE(InfoExtractor):
             for entry in f4m_formats:
                 # URLs without the extra param induce an 404 error
                 entry.update({'extra_param_to_segment_url': hdcore_sign})
+        self._sort_formats(f4m_formats)
 
         return {
             'id': video_id,
