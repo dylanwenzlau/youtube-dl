@@ -3,11 +3,6 @@ from __future__ import unicode_literals
 import re
 
 from .common import PostProcessor
-from ..utils import PostProcessingError
-
-
-class MetadataFromTitlePPError(PostProcessingError):
-    pass
 
 
 class MetadataFromTitlePP(PostProcessor):
@@ -17,7 +12,7 @@ class MetadataFromTitlePP(PostProcessor):
         self._titleregex = self.format_to_regex(titleformat)
 
     def format_to_regex(self, fmt):
-        """
+        r"""
         Converts a string like
            '%(title)s - %(artist)s'
         to a regex like
@@ -31,14 +26,15 @@ class MetadataFromTitlePP(PostProcessor):
             regex += r'(?P<' + match.group(1) + '>.+)'
             lastpos = match.end()
         if lastpos < len(fmt):
-            regex += re.escape(fmt[lastpos:len(fmt)])
+            regex += re.escape(fmt[lastpos:])
         return regex
 
     def run(self, info):
         title = info['title']
         match = re.match(self._titleregex, title)
         if match is None:
-            raise MetadataFromTitlePPError('Could not interpret title of video as "%s"' % self._titleformat)
+            self._downloader.to_screen('[fromtitle] Could not interpret title of video as "%s"' % self._titleformat)
+            return [], info
         for attribute, value in match.groupdict().items():
             value = match.group(attribute)
             info[attribute] = value
