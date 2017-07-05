@@ -22,7 +22,6 @@ import locale
 import math
 import operator
 import os
-import pipes
 import platform
 import random
 import re
@@ -36,6 +35,7 @@ import xml.etree.ElementTree
 import zlib
 
 from .compat import (
+    compat_HTMLParseError,
     compat_HTMLParser,
     compat_basestring,
     compat_chr,
@@ -409,8 +409,12 @@ def extract_attributes(html_element):
     but the cases in the unit test will work for all of 2.6, 2.7, 3.2-3.5.
     """
     parser = HTMLAttributeParser()
-    parser.feed(html_element)
-    parser.close()
+    try:
+        parser.feed(html_element)
+        parser.close()
+    # Older Python may throw HTMLParseError in case of malformed HTML
+    except compat_HTMLParseError:
+        pass
     return parser.attrs
 
 
@@ -932,14 +936,6 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
         except zlib.error:
             return zlib.decompress(data)
 
-    @staticmethod
-    def addinfourl_wrapper(stream, headers, url, code):
-        if hasattr(compat_urllib_request.addinfourl, 'getcode'):
-            return compat_urllib_request.addinfourl(stream, headers, url, code)
-        ret = compat_urllib_request.addinfourl(stream, headers, url)
-        ret.code = code
-        return ret
-
     def http_request(self, req):
         # According to RFC 3986, URLs can not contain non-ASCII characters, however this is not
         # always respected by websites, some tend to give out URLs with non percent-encoded
@@ -991,13 +987,13 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
                     break
                 else:
                     raise original_ioerror
-            resp = self.addinfourl_wrapper(uncompressed, old_resp.headers, old_resp.url, old_resp.code)
+            resp = compat_urllib_request.addinfourl(uncompressed, old_resp.headers, old_resp.url, old_resp.code)
             resp.msg = old_resp.msg
             del resp.headers['Content-encoding']
         # deflate
         if resp.headers.get('Content-encoding', '') == 'deflate':
             gz = io.BytesIO(self.deflate(resp.read()))
-            resp = self.addinfourl_wrapper(gz, old_resp.headers, old_resp.url, old_resp.code)
+            resp = compat_urllib_request.addinfourl(gz, old_resp.headers, old_resp.url, old_resp.code)
             resp.msg = old_resp.msg
             del resp.headers['Content-encoding']
         # Percent-encode redirect URL of Location HTTP header to satisfy RFC 3986 (see
@@ -1187,7 +1183,7 @@ def unified_timestamp(date_str, day_first=True):
     if date_str is None:
         return None
 
-    date_str = date_str.replace(',', ' ')
+    date_str = re.sub(r'[,|]', '', date_str)
 
     pm_delta = 12 if re.search(r'(?i)PM', date_str) else 0
     timezone, date_str = extract_timezone(date_str)
@@ -1538,7 +1534,7 @@ def shell_quote(args):
         if isinstance(a, bytes):
             # We may get a filename encoded with 'encodeFilename'
             a = a.decode(encoding)
-        quoted_args.append(pipes.quote(a))
+        quoted_args.append(compat_shlex_quote(a))
     return ' '.join(quoted_args)
 
 
@@ -2098,7 +2094,7 @@ def update_Request(req, url=None, data=None, headers={}, query={}):
     return new_req
 
 
-def try_multipart_encode(data, boundary):
+def _multipart_encode_impl(data, boundary):
     content_type = 'multipart/form-data; boundary=%s' % boundary
 
     out = b''
@@ -2110,7 +2106,7 @@ def try_multipart_encode(data, boundary):
             v = v.encode('utf-8')
         # RFC 2047 requires non-ASCII field names to be encoded, while RFC 7578
         # suggests sending UTF-8 directly. Firefox sends UTF-8, too
-        content = b'Content-Disposition: form-data; name="%s"\r\n\r\n' % k + v + b'\r\n'
+        content = b'Content-Disposition: form-data; name="' + k + b'"\r\n\r\n' + v + b'\r\n'
         if boundary.encode('ascii') in content:
             raise ValueError('Boundary overlaps with data')
         out += content
@@ -2140,7 +2136,7 @@ def multipart_encode(data, boundary=None):
             boundary = '---------------' + str(random.randrange(0x0fffffff, 0xffffffff))
 
         try:
-            out, content_type = try_multipart_encode(data, boundary)
+            out, content_type = _multipart_encode_impl(data, boundary)
             break
         except ValueError:
             if has_specified_boundary:
@@ -2211,7 +2207,12 @@ def parse_age_limit(s):
 
 def strip_jsonp(code):
     return re.sub(
-        r'(?s)^[a-zA-Z0-9_.$]+\s*\(\s*(.*)\);?\s*?(?://[^\n]*)*$', r'\1', code)
+        r'''(?sx)^
+            (?:window\.)?(?P<func_name>[a-zA-Z0-9_.$]+)
+            (?:\s*&&\s*(?P=func_name))?
+            \s*\(\s*(?P<callback_data>.*)\);?
+            \s*?(?://[^\n]*)*$''',
+        r'\g<callback_data>', code)
 
 
 def js_to_json(code):
@@ -2360,11 +2361,11 @@ def parse_codecs(codecs_str):
         if codec in ('avc1', 'avc2', 'avc3', 'avc4', 'vp9', 'vp8', 'hev1', 'hev2', 'h263', 'h264', 'mp4v'):
             if not vcodec:
                 vcodec = full_codec
-        elif codec in ('mp4a', 'opus', 'vorbis', 'mp3', 'aac', 'ac-3'):
+        elif codec in ('mp4a', 'opus', 'vorbis', 'mp3', 'aac', 'ac-3', 'ec-3', 'eac3', 'dtsc', 'dtse', 'dtsh', 'dtsl'):
             if not acodec:
                 acodec = full_codec
         else:
-            write_string('WARNING: Unknown codec %s' % full_codec, sys.stderr)
+            write_string('WARNING: Unknown codec %s\n' % full_codec, sys.stderr)
     if not vcodec and not acodec:
         if len(splited_codecs) == 2:
             return {

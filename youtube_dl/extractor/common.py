@@ -376,7 +376,7 @@ class InfoExtractor(object):
             cls._VALID_URL_RE = re.compile(cls._VALID_URL)
         m = cls._VALID_URL_RE.match(url)
         assert m
-        return m.group('id')
+        return compat_str(m.group('id'))
 
     @classmethod
     def working(cls):
@@ -420,7 +420,7 @@ class InfoExtractor(object):
             if country_code:
                 self._x_forwarded_for_ip = GeoUtils.random_ipv4(country_code)
                 if self._downloader.params.get('verbose', False):
-                    self._downloader.to_stdout(
+                    self._downloader.to_screen(
                         '[debug] Using fake IP %s (%s) as X-Forwarded-For.'
                         % (self._x_forwarded_for_ip, country_code.upper()))
 
@@ -1002,17 +1002,17 @@ class InfoExtractor(object):
                 item_type = e.get('@type')
                 if expected_type is not None and expected_type != item_type:
                     return info
-                if item_type == 'TVEpisode':
+                if item_type in ('TVEpisode', 'Episode'):
                     info.update({
                         'episode': unescapeHTML(e.get('name')),
                         'episode_number': int_or_none(e.get('episodeNumber')),
                         'description': unescapeHTML(e.get('description')),
                     })
                     part_of_season = e.get('partOfSeason')
-                    if isinstance(part_of_season, dict) and part_of_season.get('@type') == 'TVSeason':
+                    if isinstance(part_of_season, dict) and part_of_season.get('@type') in ('TVSeason', 'Season', 'CreativeWorkSeason'):
                         info['season_number'] = int_or_none(part_of_season.get('seasonNumber'))
                     part_of_series = e.get('partOfSeries') or e.get('partOfTVSeries')
-                    if isinstance(part_of_series, dict) and part_of_series.get('@type') == 'TVSeries':
+                    if isinstance(part_of_series, dict) and part_of_series.get('@type') in ('TVSeries', 'Series', 'CreativeWorkSeries'):
                         info['series'] = unescapeHTML(part_of_series.get('name'))
                 elif item_type == 'Article':
                     info.update({
@@ -1022,10 +1022,10 @@ class InfoExtractor(object):
                     })
                 elif item_type == 'VideoObject':
                     extract_video_object(e)
-                elif item_type == 'WebPage':
-                    video = e.get('video')
-                    if isinstance(video, dict) and video.get('@type') == 'VideoObject':
-                        extract_video_object(video)
+                    continue
+                video = e.get('video')
+                if isinstance(video, dict) and video.get('@type') == 'VideoObject':
+                    extract_video_object(video)
                 break
         return dict((k, v) for k, v in info.items() if v is not None)
 
@@ -2001,6 +2001,12 @@ class InfoExtractor(object):
             compat_etree_fromstring(ism.encode('utf-8')), urlh.geturl(), ism_id)
 
     def _parse_ism_formats(self, ism_doc, ism_url, ism_id=None):
+        """
+        Parse formats from ISM manifest.
+        References:
+         1. [MS-SSTR]: Smooth Streaming Protocol,
+            https://msdn.microsoft.com/en-us/library/ff469518.aspx
+        """
         if ism_doc.get('IsLive') == 'TRUE' or ism_doc.find('Protection') is not None:
             return []
 
@@ -2022,8 +2028,11 @@ class InfoExtractor(object):
                     self.report_warning('%s is not a supported codec' % fourcc)
                     continue
                 tbr = int(track.attrib['Bitrate']) // 1000
-                width = int_or_none(track.get('MaxWidth'))
-                height = int_or_none(track.get('MaxHeight'))
+                # [1] does not mention Width and Height attributes. However,
+                # they're often present while MaxWidth and MaxHeight are
+                # missing, so should be used as fallbacks
+                width = int_or_none(track.get('MaxWidth') or track.get('Width'))
+                height = int_or_none(track.get('MaxHeight') or track.get('Height'))
                 sampling_rate = int_or_none(track.get('SamplingRate'))
 
                 track_url_pattern = re.sub(r'{[Bb]itrate}', track.attrib['Bitrate'], url_pattern)
@@ -2196,8 +2205,9 @@ class InfoExtractor(object):
 
     def _extract_wowza_formats(self, url, video_id, m3u8_entry_protocol='m3u8_native', skip_protocols=[]):
         url = re.sub(r'/(?:manifest|playlist|jwplayer)\.(?:m3u8|f4m|mpd|smil)', '', url)
-        url_base = self._search_regex(r'(?:https?|rtmp|rtsp)(://[^?]+)', url, 'format url')
-        http_base_url = 'http' + url_base
+        url_base = self._search_regex(
+            r'(?:(?:https?|rtmp|rtsp):)?(//[^?]+)', url, 'format url')
+        http_base_url = '%s:%s' % ('http', url_base)
         formats = []
         if 'm3u8' not in skip_protocols:
             formats.extend(self._extract_m3u8_formats(
@@ -2231,7 +2241,7 @@ class InfoExtractor(object):
             for protocol in ('rtmp', 'rtsp'):
                 if protocol not in skip_protocols:
                     formats.append({
-                        'url': protocol + url_base,
+                        'url': '%s:%s' % (protocol, url_base),
                         'format_id': protocol,
                         'protocol': protocol,
                     })
@@ -2289,6 +2299,8 @@ class InfoExtractor(object):
             tracks = video_data.get('tracks')
             if tracks and isinstance(tracks, list):
                 for track in tracks:
+                    if not isinstance(track, dict):
+                        continue
                     if track.get('kind') != 'captions':
                         continue
                     track_url = urljoin(base_url, track.get('file'))
@@ -2318,6 +2330,8 @@ class InfoExtractor(object):
         urls = []
         formats = []
         for source in jwplayer_sources_data:
+            if not isinstance(source, dict):
+                continue
             source_url = self._proto_relative_url(source.get('file'))
             if not source_url:
                 continue

@@ -310,7 +310,7 @@ def parseOpts(overrideArguments=None):
         metavar='FILTER', dest='match_filter', default=None,
         help=(
             'Generic video filter. '
-            'Specify any key (see help for -o for a list of available keys) to '
+            'Specify any key (see the "OUTPUT TEMPLATE" for a list of available keys) to '
             'match if the key is present, '
             '!key to check if the key is not present, '
             'key > NUMBER (like "comment_count > 12", also works with '
@@ -622,7 +622,7 @@ def parseOpts(overrideArguments=None):
     verbosity.add_option(
         '-j', '--dump-json',
         action='store_true', dest='dumpjson', default=False,
-        help='Simulate, quiet but print JSON information. See --output for a description of available keys.')
+        help='Simulate, quiet but print JSON information. See the "OUTPUT TEMPLATE" for a description of available keys.')
     verbosity.add_option(
         '-J', '--dump-single-json',
         action='store_true', dest='dump_single_json', default=False,
@@ -818,11 +818,12 @@ def parseOpts(overrideArguments=None):
         '--metadata-from-title',
         metavar='FORMAT', dest='metafromtitle',
         help='Parse additional metadata like song title / artist from the video title. '
-             'The format syntax is the same as --output, '
-             'the parsed parameters replace existing values. '
-             'Additional templates: %(album)s, %(artist)s. '
+             'The format syntax is the same as --output. Regular expression with '
+             'named capture groups may also be used. '
+             'The parsed parameters replace existing values. '
              'Example: --metadata-from-title "%(artist)s - %(title)s" matches a title like '
-             '"Coldplay - Paradise"')
+             '"Coldplay - Paradise". '
+             'Example (regex): --metadata-from-title "(?P<artist>.+?) - (?P<title>.+)"')
     postproc.add_option(
         '--xattrs',
         action='store_true', dest='xattrs', default=False,

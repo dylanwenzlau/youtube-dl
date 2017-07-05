@@ -1,8 +1,288 @@
-version <unreleased>
+version 2017.07.02
+
+Core
+* [extractor/common] Improve _json_ld
 
 Extractors
++ [thisoldhouse] Add more fallbacks for video id
+* [thisoldhouse] Fix video id extraction (#13540, #13541)
+* [xfileshare] Extend format regular expression (#13536)
+* [ted] Fix extraction (#13535)
++ [tastytrade] Add support for tastytrade.com (#13521)
+* [dplayit] Relax video id regular expression (#13524)
++ [generic] Extract more generic metadata (#13527)
++ [bbccouk] Capture and output error message (#13501, #13518)
+* [cbsnews] Relax video info regular expression (#13284, #13503)
++ [facebook] Add support for plugin video embeds and multiple embeds (#13493)
+* [soundcloud] Switch to https for API requests (#13502)
+* [pandatv] Switch to https for API and download URLs
++ [pandatv] Add support for https URLs (#13491)
++ [niconico] Support sp subdomain (#13494)
+
+
+version 2017.06.25
+
+Core
++ [adobepass] Add support for DIRECTV NOW (mso ATTOTT) (#13472)
+* [YoutubeDL] Skip malformed formats for better extraction robustness
+
+Extractors
++ [wsj] Add support for barrons.com (#13470)
++ [ign] Add another video id pattern (#13328)
++ [raiplay:live] Add support for live streams (#13414)
++ [redbulltv] Add support for live videos and segments (#13486)
++ [onetpl] Add support for videos embedded via pulsembed (#13482)
+* [ooyala] Make more robust
+* [ooyala] Skip empty format URLs (#13471, #13476)
+* [hgtv.com:show] Fix typo
+
+
+version 2017.06.23
+
+Core
+* [adobepass] Fix extraction on older python 2.6
+
+Extractors
+* [youtube] Adapt to new automatic captions rendition (#13467)
+* [hgtv.com:show] Relax video config regular expression (#13279, #13461)
+* [drtuber] Fix formats extraction (#12058)
+* [youporn] Fix upload date extraction
+* [youporn] Improve formats extraction
+* [youporn] Fix title extraction (#13456)
+* [googledrive] Fix formats sorting (#13443)
+* [watchindianporn] Fix extraction (#13411, #13415)
++ [vimeo] Add fallback mp4 extension for original format
++ [ruv] Add support for ruv.is (#13396)
+* [viu] Fix extraction on older python 2.6
+* [pandora.tv] Fix upload_date extraction (#12846)
++ [asiancrush] Add support for asiancrush.com (#13420)
+
+
+version 2017.06.18
+
+Core
+* [downloader/common] Use utils.shell_quote for debug command line
+* [utils] Use compat_shlex_quote in shell_quote
+* [postprocessor/execafterdownload] Encode command line (#13407)
+* [compat] Fix compat_shlex_quote on Windows (#5889, #10254)
+* [postprocessor/metadatafromtitle] Fix missing optional meta fields processing
+   in --metadata-from-title (#13408)
+* [extractor/common] Fix json dumping with --geo-bypass
++ [extractor/common] Improve jwplayer subtitles extraction
++ [extractor/common] Improve jwplayer formats extraction (#13379)
+
+Extractors
+* [polskieradio] Fix extraction (#13392)
++ [xfileshare] Add support for fastvideo.me (#13385)
+* [bilibili] Fix extraction of videos with double quotes in titles (#13387)
+* [4tube] Fix extraction (#13381, #13382)
++ [disney] Add support for disneychannel.de (#13383)
+* [npo] Improve URL regular expression (#13376)
++ [corus] Add support for showcase.ca
++ [corus] Add support for history.ca (#13359)
+
+
+version 2017.06.12
+
+Core
+* [utils] Handle compat_HTMLParseError in extract_attributes (#13349)
++ [compat] Introduce compat_HTMLParseError
+* [utils] Improve unified_timestamp
+* [extractor/generic] Ensure format id is unicode string
+* [extractor/common] Return unicode string from _match_id
++ [YoutubeDL] Sanitize more fields (#13313)
+
+Extractors
++ [xfileshare] Add support for rapidvideo.tv (#13348)
+* [xfileshare] Modernize and pass Referer
++ [rutv] Add support for testplayer.vgtrk.com (#13347)
++ [newgrounds] Extract more metadata (#13232)
++ [newgrounds:playlist] Add support for playlists (#10611)
+* [newgrounds] Improve formats and uploader extraction (#13346)
+* [msn] Fix formats extraction
+* [turbo] Ensure format id is string
+* [sexu] Ensure height is int
+* [jove] Ensure comment count is int
+* [golem] Ensure format id is string
+* [gfycat] Ensure filesize is int
+* [foxgay] Ensure height is int
+* [flickr] Ensure format id is string
+* [sohu] Fix numeric fields
+* [safari] Improve authentication detection (#13319)
+* [liveleak] Ensure height is int (#13313)
+* [streamango] Make title optional (#13292)
+* [rtlnl] Improve URL regular expression (#13295)
+* [tvplayer] Fix extraction (#13291)
+
+
+version 2017.06.05
+
+Core
+* [YoutubeDL] Don't emit ANSI escape codes on Windows (#13270)
+
+Extractors
++ [bandcamp:weekly] Add support for bandcamp weekly (#12758)
+* [pornhub:playlist] Fix extraction (#13281)
+- [godtv] Remove extractor (#13175)
+* [safari] Fix typo (#13252)
+* [youtube] Improve chapters extraction (#13247)
+* [1tv] Lower preference for HTTP formats (#13246)
+* [francetv] Relax URL regular expression
+* [drbonanza] Fix extraction (#13231)
+* [packtpub] Fix authentication (#13240)
+
+
+version 2017.05.29
+
+Extractors
+* [youtube] Fix DASH MPD extraction for videos with non-encrypted format URLs
+  (#13211)
+* [xhamster] Fix uploader and like/dislike count extraction (#13216))
++ [xhamster] Extract categories (#11728)
++ [abcnews] Add support for embed URLs (#12851)
+* [gaskrank] Fix extraction (#12493)
+* [medialaan] Fix videos with missing videoUrl (#12774)
+* [dvtv] Fix playlist support
++ [dvtv] Add support for DASH and HLS formats (#3063)
++ [beam:vod] Add support for beam.pro/mixer.com VODs (#13032))
+* [cbsinteractive] Relax URL regular expression (#13213)
+* [adn] Fix formats extraction
++ [youku] Extract more metadata (#10433)
+* [cbsnews] Fix extraction (#13205)
+
+
+version 2017.05.26
+
+Core
++ [utils] strip_jsonp() can recognize more patterns
+* [postprocessor/ffmpeg] Fix metadata filename handling on Python 2 (#13182)
+
+Extractors
++ [youtube] DASH MPDs with cipher signatures are recognized now (#11381)
++ [bbc] Add support for authentication
+* [tudou] Merge into youku extractor (#12214)
+* [youku:show] Fix extraction
+* [youku] Fix extraction (#13191)
+* [udemy] Fix extraction for outputs' format entries without URL (#13192)
+* [vimeo] Fix formats' sorting (#13189)
+* [cbsnews] Fix extraction for 60 Minutes videos (#12861)
+
+
+version 2017.05.23
+
+Core
++ [downloader/external] Pass -loglevel to ffmpeg downloader (#13183)
++ [adobepass] Add support for Bright House Networks (#13149)
+
+Extractors
++ [streamcz] Add support for subtitles (#13174)
+* [youtube] Fix DASH manifest signature decryption (#8944, #13156)
+* [toggle] Relax URL regular expression (#13172)
+* [toypics] Fix extraction (#13077)
+* [njpwworld] Fix extraction (#13162, #13169)
++ [hitbox] Add support for smashcast.tv (#13154)
+* [mitele] Update app key regular expression (#13158)
+
+
+version 2017.05.18.1
+
+Core
+* [jsinterp] Fix typo and cleanup regular expressions (#13134)
+
+
+version 2017.05.18
+
+Core
++ [jsinterp] Add support for quoted names and indexers (#13123, #13124, #13125,
+  #13126, #13128, #13129, #13130, #13131, #13132)
++ [extractor/common] Add support for schemeless URLs in _extract_wowza_formats
+  (#13088, #13092)
++ [utils] Recognize more audio codecs (#13081)
+
+Extractors
++ [vier] Extract more metadata (#12539)
+* [vier] Improve extraction (#12801)
+    + Add support for authentication
+    * Bypass authentication when no credentials provided
+    * Improve extraction robustness
+* [dailymail] Fix sources extraction (#13057)
+* [dailymotion] Extend URL regular expression (#13079)
+
+
+version 2017.05.14
+
+Core
++ [extractor/common] Respect Width and Height attributes in ISM manifests
++ [postprocessor/metadatafromtitle] Add support regular expression syntax for
+  --metadata-from-title (#13065)
+
+Extractors
++ [mediaset] Add support for video.mediaset.it (#12708, #12964)
+* [orf:radio] Fix extraction (#11643, #12926)
+* [aljazeera] Extend URL regular expression (#13053)
+* [imdb] Relax URL regular expression (#13056)
++ [francetv] Add support for mobile.france.tv (#13068)
++ [upskill] Add support for upskillcourses.com (#13043)
+* [thescene] Fix extraction (#13061)
+* [condenast] Improve embed support
+* [liveleak] Fix extraction (#12053)
++ [douyu] Support Douyu shows (#12228)
+* [myspace] Improve URL regular expression (#13040)
+* [adultswim] Use desktop platform in assets URL (#13041)
+
+
+version 2017.05.09
+
+Core
+* [YoutubeDL] Force --restrict-filenames when no locale is set on all python
+  versions (#13027)
+
+Extractors
+* [francetv] Adapt to site redesign (#13034)
++ [packtpub] Add support for authentication (#12622)
+* [drtv] Lower preference for SignLanguage formats (#13013, #13016)
++ [cspan] Add support for brightcove live embeds (#13028)
+* [vrv] Extract DASH formats and subtitles
+* [funimation] Fix authentication (#13021)
+* [adultswim] Fix extraction (#8640, #10950, #11042, #12121)
+    + Add support for Adobe Pass authentication
+    + Add support for live streams
+    + Add support for show pages
+* [turner] Extract thumbnail, is_live and strip description
++ [nonktube] Add support for nonktube.com (#8647, #13024)
++ [nuevo] Pass headers to _extract_nuevo
+* [nbc] Improve extraction (#12364)
+
+
+version 2017.05.07
+
+Common
+* [extractor/common] Fix typo in _extract_akamai_formats
++ [postprocessor/ffmpeg] Embed chapters into media file with --add-metadata
++ [extractor/common] Introduce chapters meta field
+
+Extractors
+* [youtube] Fix authentication (#12820, #12927, #12973, #12992, #12993, #12995,
+  #13003)
+* [bilibili] Fix video downloading (#13001)
+* [rmcdecouverte] Fix extraction (#12937)
+* [theplatform] Extract chapters
+* [bandcamp] Fix thumbnail extraction (#12980)
+* [pornhub] Extend URL regular expression (#12996)
++ [youtube] Extract chapters
++ [nrk] Extract chapters
++ [vice] Add support for ooyala embeds in article pages
++ [vice] Support vice articles (#12968)
+* [vice] Fix extraction for non en_us videos (#12967)
+* [gdcvault] Fix extraction for some videos (#12733)
+* [pbs] Improve multipart video support (#12981)
+* [laola1tv] Fix extraction (#12880)
 + [cda] Support birthday verification (#12789)
 * [leeco] Fix extraction (#12974)
++ [pbs] Extract chapters
+* [amp] Imporove thumbnail and subtitles extraction
+* [foxsports] Fix extraction (#12945)
+- [coub] Remove comment count extraction (#12941)
 
 
 version 2017.05.01

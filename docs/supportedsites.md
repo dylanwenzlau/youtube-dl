@@ -67,6 +67,8 @@
  - **arte.tv:info**
  - **arte.tv:magazine**
  - **arte.tv:playlist**
+ - **AsianCrush**
+ - **AsianCrushPlaylist**
  - **AtresPlayer**
  - **ATTTechChannel**
  - **ATVAt**
@@ -87,13 +89,13 @@
  - **bambuser:channel**
  - **Bandcamp**
  - **Bandcamp:album**
+ - **Bandcamp:weekly**
  - **bangumi.bilibili.com**: BiliBili番剧
  - **bbc**: BBC
  - **bbc.co.uk**: BBC iPlayer
  - **bbc.co.uk:article**: BBC articles
  - **bbc.co.uk:iplayer:playlist**
  - **bbc.co.uk:playlist**
- - **Beam:live**
  - **Beatport**
  - **Beeg**
  - **BehindKink**
@@ -216,6 +218,7 @@
  - **DiscoveryVR**
  - **Disney**
  - **Dotsub**
+ - **DouyuShow**
  - **DouyuTV**: 斗鱼
  - **DPlay**
  - **DPlayIt**
@@ -281,7 +284,8 @@
  - **france2.fr:generation-quoi**
  - **FranceCulture**
  - **FranceInter**
- - **francetv**: France 2, 3, 4, 5 and Ô
+ - **FranceTV**
+ - **FranceTVEmbed**
  - **francetvinfo.fr**
  - **Freesound**
  - **freespeech.org**
@@ -309,7 +313,6 @@
  - **Go**
  - **Go90**
  - **GodTube**
- - **GodTV**
  - **Golem**
  - **GoogleDrive**
  - **Goshgay**
@@ -432,6 +435,7 @@
  - **MDR**: MDR.DE and KiKA
  - **media.ccc.de**
  - **Medialaan**
+ - **Mediaset**
  - **Medici**
  - **Meipai**: 美拍
  - **MelonVOD**
@@ -450,6 +454,8 @@
  - **mixcloud:playlist**
  - **mixcloud:stream**
  - **mixcloud:user**
+ - **Mixer:live**
+ - **Mixer:vod**
  - **MLB**
  - **Mnet**
  - **MoeVideo**: LetitBit video services: moevideo.net, playreplay.net and videochart.net
@@ -508,6 +514,7 @@
  - **netease:song**: 网易云音乐
  - **Netzkino**
  - **Newgrounds**
+ - **NewgroundsPlaylist**
  - **Newstube**
  - **NextMedia**: 蘋果日報
  - **NextMediaActionNews**: 蘋果日報 - 動新聞
@@ -530,6 +537,7 @@
  - **NJPWWorld**: 新日本プロレスワールド
  - **NobelPrize**
  - **Noco**
+ - **NonkTube**
  - **Noovo**
  - **Normalboots**
  - **NosVideo**
@@ -602,7 +610,6 @@
  - **pluralsight**
  - **pluralsight:course**
  - **plus.google**: Google Plus
- - **pluzz.francetv.fr**
  - **podomatic**
  - **Pokemon**
  - **PolskieRadio**
@@ -637,6 +644,7 @@
  - **RadioJavan**
  - **Rai**
  - **RaiPlay**
+ - **RaiPlayLive**
  - **RBMARadio**
  - **RDS**: RDS.ca
  - **RedBullTV**
@@ -681,6 +689,7 @@
  - **rutube:person**: Rutube person videos
  - **RUTV**: RUTV.RU
  - **Ruutu**
+ - **Ruv**
  - **safari**: safaribooksonline.com online video
  - **safari:api**
  - **safari:course**: safaribooksonline.com online courses
@@ -759,6 +768,7 @@
  - **Tagesschau**
  - **tagesschau:player**
  - **Tass**
+ - **TastyTrade**
  - **TBS**
  - **TDSLifeway**
  - **teachertube**: teachertube.com videos
@@ -800,16 +810,13 @@
  - **ToonGoggles**
  - **Tosh**: Tosh.0
  - **tou.tv**
- - **Toypics**: Toypics user profile
+ - **Toypics**: Toypics video
  - **ToypicsUser**: Toypics user profile
  - **TrailerAddict** (Currently broken)
  - **Trilulilu**
  - **TruTV**
  - **Tube8**
  - **TubiTv**
- - **tudou**
- - **tudou:album**
- - **tudou:playlist**
  - **Tumblr**
  - **tunein:clip**
  - **tunein:program**
@@ -860,6 +867,8 @@
  - **uol.com.br**
  - **uplynk**
  - **uplynk:preplay**
+ - **Upskill**
+ - **UpskillCourse**
  - **Urort**: NRK P3 Urørt
  - **URPlay**
  - **USANetwork**
@@ -879,9 +888,10 @@
  - **VGTV**: VGTV, BTTV, FTV, Aftenposten and Aftonbladet
  - **vh1.com**
  - **Viafree**
- - **Vice**
+ - **vice**
+ - **vice:article**
+ - **vice:show**
  - **Viceland**
- - **ViceShow**
  - **Vidbit**
  - **Viddler**
  - **Videa**
@@ -970,7 +980,7 @@
  - **WSJArticle**
  - **XBef**
  - **XboxClips**
- - **XFileShare**: XFileShare based sites: DaClips, FileHoot, GorillaVid, MovPod, PowerWatch, Rapidvideo.ws, TheVideoBee, Vidto, Streamin.To, XVIDSTAGE, Vid ABC, VidBom, vidlo
+ - **XFileShare**: XFileShare based sites: DaClips, FileHoot, GorillaVid, MovPod, PowerWatch, Rapidvideo.ws, TheVideoBee, Vidto, Streamin.To, XVIDSTAGE, Vid ABC, VidBom, vidlo, RapidVideo.TV, FastVideo.me
  - **XHamster**
  - **XHamsterEmbed**
  - **xiami:album**: 虾米音乐 - 专辑
