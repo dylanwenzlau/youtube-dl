@@ -101,7 +101,7 @@ class TwitchBaseIE(InfoExtractor):
             fail(clean_html(login_page))
 
         redirect_page, handle = login_step(
-            login_page, handle, 'Logging in as %s' % username, {
+            login_page, handle, 'Logging in', {
                 'username': username,
                 'password': password,
             })
@@ -358,8 +358,15 @@ class TwitchPlaylistBaseIE(TwitchBaseIE):
                 break
             offset += limit
         return self.playlist_result(
-            [self.url_result(entry) for entry in orderedSet(entries)],
+            [self._make_url_result(entry) for entry in orderedSet(entries)],
             channel_id, channel_name)
+
+    def _make_url_result(self, url):
+        try:
+            video_id = 'v%s' % TwitchVodIE._match_id(url)
+            return self.url_result(url, TwitchVodIE.ie_key(), video_id=video_id)
+        except AssertionError:
+            return self.url_result(url)
 
     def _extract_playlist_page(self, response):
         videos = response.get('videos')
@@ -609,7 +616,7 @@ class TwitchClipsIE(InfoExtractor):
                 r'(?s)clipInfo\s*=\s*({.+?});', webpage, 'clip info'),
             video_id, transform_source=js_to_json)
 
-        title = clip.get('channel_title') or self._og_search_title(webpage)
+        title = clip.get('title') or clip.get('channel_title') or self._og_search_title(webpage)
 
         formats = [{
             'url': option['source'],

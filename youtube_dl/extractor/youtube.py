@@ -332,6 +332,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
                          (?:(?:(?:(?:\w+\.)?[yY][oO][uU][tT][uU][bB][eE](?:-nocookie)?\.com/|
                             (?:www\.)?deturl\.com/www\.youtube\.com/|
                             (?:www\.)?pwnyoutube\.com/|
+                            (?:www\.)?hooktube\.com/|
                             (?:www\.)?yourepeat\.com/|
                             tube\.majestyc\.net/|
                             youtube\.googleapis\.com/)                        # the various hostnames, with wildcard subdomains
@@ -1390,7 +1391,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
             )
             (["\'])
                 (?P<url>(?:https?:)?//(?:www\.)?youtube(?:-nocookie)?\.com/
-                (?:embed|v|p)/.+?)
+                (?:embed|v|p)/[0-9A-Za-z_-]{11}.*?)
             \1''', webpage)]
 
         # lazyYT YouTube embed
@@ -1621,6 +1622,17 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
         # description
         description_original = video_description = get_element_by_id("eow-description", video_webpage)
         if video_description:
+
+            def replace_url(m):
+                redir_url = compat_urlparse.urljoin(url, m.group(1))
+                parsed_redir_url = compat_urllib_parse_urlparse(redir_url)
+                if re.search(r'^(?:www\.)?(?:youtube(?:-nocookie)?\.com|youtu\.be)$', parsed_redir_url.netloc) and parsed_redir_url.path == '/redirect':
+                    qs = compat_parse_qs(parsed_redir_url.query)
+                    q = qs.get('q')
+                    if q and q[0]:
+                        return q[0]
+                return redir_url
+
             description_original = video_description = re.sub(r'''(?x)
                 <a\s+
                     (?:[a-zA-Z-]+="[^"]*"\s+)*?
@@ -1629,7 +1641,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
                     class="[^"]*"[^>]*>
                 [^<]+\.{3}\s*
                 </a>
-            ''', r'\1', video_description)
+            ''', replace_url, video_description)
             video_description = clean_html(video_description)
         else:
             fd_mobj = re.search(r'<meta name="description" content="([^"]+)"', video_webpage)
@@ -1682,7 +1694,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
         video_uploader_id = None
         video_uploader_url = None
         mobj = re.search(
-            r'<link itemprop="url" href="(?P<uploader_url>https?://www.youtube.com/(?:user|channel)/(?P<uploader_id>[^"]+))">',
+            r'<link itemprop="url" href="(?P<uploader_url>https?://www\.youtube\.com/(?:user|channel)/(?P<uploader_id>[^"]+))">',
             video_webpage)
         if mobj is not None:
             video_uploader_id = mobj.group('uploader_id')
@@ -1798,7 +1810,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
                 'url': video_info['conn'][0],
                 'player_url': player_url,
             }]
-        elif len(video_info.get('url_encoded_fmt_stream_map', [''])[0]) >= 1 or len(video_info.get('adaptive_fmts', [''])[0]) >= 1:
+        elif not is_live and (len(video_info.get('url_encoded_fmt_stream_map', [''])[0]) >= 1 or len(video_info.get('adaptive_fmts', [''])[0]) >= 1):
             encoded_url_map = video_info.get('url_encoded_fmt_stream_map', [''])[0] + ',' + video_info.get('adaptive_fmts', [''])[0]
             if 'rtmpe%3Dyes' in encoded_url_map:
                 raise ExtractorError('rtmpe downloads are not supported, see https://github.com/rg3/youtube-dl/issues/343 for more information.', expected=True)
@@ -2039,39 +2051,6 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
         }
 
 
-class YoutubeSharedVideoIE(InfoExtractor):
-    _VALID_URL = r'(?:https?:)?//(?:www\.)?youtube\.com/shared\?.*\bci=(?P<id>[0-9A-Za-z_-]{11})'
-    IE_NAME = 'youtube:shared'
-
-    _TEST = {
-        'url': 'https://www.youtube.com/shared?ci=1nEzmT-M4fU',
-        'info_dict': {
-            'id': 'uPDB5I9wfp8',
-            'ext': 'webm',
-            'title': 'Pocoyo: 90 minutos de episódios completos Português para crianças - PARTE 3',
-            'description': 'md5:d9e4d9346a2dfff4c7dc4c8cec0f546d',
-            'upload_date': '20160219',
-            'uploader': 'Pocoyo - Português (BR)',
-            'uploader_id': 'PocoyoBrazil',
-        },
-        'add_ie': ['Youtube'],
-        'params': {
-            # There are already too many Youtube downloads
-            'skip_download': True,
-        },
-    }
-
-    def _real_extract(self, url):
-        video_id = self._match_id(url)
-
-        webpage = self._download_webpage(url, video_id)
-
-        real_video_id = self._html_search_meta(
-            'videoId', webpage, 'YouTube video id', fatal=True)
-
-        return self.url_result(real_video_id, YoutubeIE.ie_key())
-
-
 class YoutubePlaylistIE(YoutubePlaylistBaseInfoExtractor):
     IE_DESC = 'YouTube.com playlists'
     _VALID_URL = r"""(?x)(?:
@@ -2291,6 +2270,19 @@ class YoutubePlaylistIE(YoutubePlaylistBaseInfoExtractor):
             r'(?s)<h1 class="pl-header-title[^"]*"[^>]*>\s*(.*?)\s*</h1>',
             page, 'title', default=None)
 
+        _UPLOADER_BASE = r'class=["\']pl-header-details[^>]+>\s*<li>\s*<a[^>]+\bhref='
+        uploader = self._search_regex(
+            r'%s["\']/(?:user|channel)/[^>]+>([^<]+)' % _UPLOADER_BASE,
+            page, 'uploader', default=None)
+        mobj = re.search(
+            r'%s(["\'])(?P<path>/(?:user|channel)/(?P<uploader_id>.+?))\1' % _UPLOADER_BASE,
+            page)
+        if mobj:
+            uploader_id = mobj.group('uploader_id')
+            uploader_url = compat_urlparse.urljoin(url, mobj.group('path'))
+        else:
+            uploader_id = uploader_url = None
+
         has_videos = True
 
         if not playlist_title:
@@ -2301,8 +2293,15 @@ class YoutubePlaylistIE(YoutubePlaylistBaseInfoExtractor):
             except StopIteration:
                 has_videos = False
 
-        return has_videos, self.playlist_result(
+        playlist = self.playlist_result(
             self._entries(page, playlist_id), playlist_id, playlist_title)
+        playlist.update({
+            'uploader': uploader,
+            'uploader_id': uploader_id,
+            'uploader_url': uploader_url,
+        })
+
+        return has_videos, playlist
 
     def _check_download_just_video(self, url, playlist_id):
         # Check if it's a video-specific URL

@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/rg3/youtube-dl.svg?branch=master)](https://travis-ci.org/rg3/youtube-dl)
+
 youtube-dl - download videos from youtube.com or other video platforms
 
 - [INSTALLATION](#installation)
@@ -44,7 +46,7 @@ Or with [MacPorts](https://www.macports.org/):
 Alternatively, refer to the [developer instructions](#developer-instructions) for how to check out and work with the git repository. For further options, including PGP signatures, see the [youtube-dl Download Page](https://rg3.github.io/youtube-dl/download.html).
 
 # DESCRIPTION
-**youtube-dl** is a command-line program to download videos from YouTube.com and a few more sites. It requires the Python interpreter, version 2.6, 2.7, or 3.2+, and it is not platform specific. It should work on your Unix box, on Windows or on Mac OS X. It is released to the public domain, which means you can modify it, redistribute it or use it however you like.
+**youtube-dl** is a command-line program to download videos from YouTube.com and a few more sites. It requires the Python interpreter, version 2.6, 2.7, or 3.2+, and it is not platform specific. It should work on your Unix box, on Windows or on macOS. It is released to the public domain, which means you can modify it, redistribute it or use it however you like.
 
     youtube-dl [OPTIONS] URL [URL...]
 
@@ -510,6 +512,9 @@ The basic usage is not to set any template arguments when downloading a single f
  - `average_rating` (numeric): Average rating give by users, the scale used depends on the webpage
  - `comment_count` (numeric): Number of comments on the video
  - `age_limit` (numeric): Age restriction for the video (years)
+ - `is_live` (boolean): Whether this video is a live stream or a fixed-length video
+ - `start_time` (numeric): Time in seconds where the reproduction should start, as specified in the URL
+ - `end_time` (numeric): Time in seconds where the reproduction should end, as specified in the URL
  - `format` (string): A human-readable description of the format 
  - `format_id` (string): Format code specified by `--format`
  - `format_note` (string): Additional info about the format
@@ -535,6 +540,8 @@ The basic usage is not to set any template arguments when downloading a single f
  - `playlist_index` (numeric): Index of the video in the playlist padded with leading zeros according to the total length of the playlist
  - `playlist_id` (string): Playlist identifier
  - `playlist_title` (string): Playlist title
+ - `playlist_uploader` (string): Full name of the playlist uploader
+ - `playlist_uploader_id` (string): Nickname or id of the playlist uploader
 
 Available for the video that belongs to some logical chapter or section:
 
@@ -857,7 +864,7 @@ Use the `--cookies` option, for example `--cookies /path/to/cookies/file.txt`.
 
 In order to extract cookies from browser use any conforming browser extension for exporting cookies. For example, [cookies.txt](https://chrome.google.com/webstore/detail/cookiestxt/njabckikapfpffapmjgojcnbfjonfjfg) (for Chrome) or [Export Cookies](https://addons.mozilla.org/en-US/firefox/addon/export-cookies/) (for Firefox).
 
-Note that the cookies file must be in Mozilla/Netscape format and the first line of the cookies file must be either `# HTTP Cookie File` or `# Netscape HTTP Cookie File`. Make sure you have correct [newline format](https://en.wikipedia.org/wiki/Newline) in the cookies file and convert newlines if necessary to correspond with your OS, namely `CRLF` (`\r\n`) for Windows and `LF` (`\n`) for Unix and Unix-like systems (Linux, Mac OS, etc.). `HTTP Error 400: Bad Request` when using `--cookies` is a good sign of invalid newline format.
+Note that the cookies file must be in Mozilla/Netscape format and the first line of the cookies file must be either `# HTTP Cookie File` or `# Netscape HTTP Cookie File`. Make sure you have correct [newline format](https://en.wikipedia.org/wiki/Newline) in the cookies file and convert newlines if necessary to correspond with your OS, namely `CRLF` (`\r\n`) for Windows and `LF` (`\n`) for Unix and Unix-like systems (Linux, macOS, etc.). `HTTP Error 400: Bad Request` when using `--cookies` is a good sign of invalid newline format.
 
 Passing cookies to youtube-dl is a good way to workaround login when a particular extractor does not implement it explicitly. Another use case is working around [CAPTCHA](https://en.wikipedia.org/wiki/CAPTCHA) some websites require you to solve in particular cases in order to get access (e.g. YouTube, CloudFlare).
 
@@ -1168,7 +1175,7 @@ with youtube_dl.YoutubeDL(ydl_opts) as ydl:
     ydl.download(['https://www.youtube.com/watch?v=BaW_jenozKc'])
 ```
 
-Most likely, you'll want to use various options. For a list of options available, have a look at [`youtube_dl/YoutubeDL.py`](https://github.com/rg3/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L129-L279). For a start, if you want to intercept youtube-dl's output, set a `logger` object.
+Most likely, you'll want to use various options. For a list of options available, have a look at [`youtube_dl/YoutubeDL.py`](https://github.com/rg3/youtube-dl/blob/3e4cedf9e8cd3157df2457df7274d0c842421945/youtube_dl/YoutubeDL.py#L137-L312). For a start, if you want to intercept youtube-dl's output, set a `logger` object.
 
 Here's a more complete example of a program that outputs only errors (and a short message after the download is finished), and downloads/converts the video to an mp3 file:
 
