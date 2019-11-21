@@ -26,7 +26,6 @@
  - **AcademicEarth:Course**
  - **acast**
  - **acast:channel**
- - **AddAnime**
  - **ADN**: Anime Digital Network
  - **AdobeConnect**
  - **AdobeTV**
@@ -76,8 +75,6 @@
  - **awaan:video**
  - **AZMedien**: AZ Medien videos
  - **BaiduVideo**: 百度视频
- - **bambuser**
- - **bambuser:channel**
  - **Bandcamp**
  - **Bandcamp:album**
  - **Bandcamp:weekly**
@@ -177,7 +174,6 @@
  - **CNN**
  - **CNNArticle**
  - **CNNBlogs**
- - **ComCarCoff**
  - **ComedyCentral**
  - **ComedyCentralFullEpisodes**
  - **ComedyCentralShortname**
@@ -205,8 +201,6 @@
  - **dailymotion**
  - **dailymotion:playlist**
  - **dailymotion:user**
- - **DaisukiMotto**
- - **DaisukiMottoPlaylist**
  - **daum.net**
  - **daum.net:clip**
  - **daum.net:playlist**
@@ -232,7 +226,6 @@
  - **DouyuShow**
  - **DouyuTV**: 斗鱼
  - **DPlay**
- - **DPlayIt**
  - **DRBonanza**
  - **Dropbox**
  - **DrTuber**
@@ -285,12 +278,12 @@
  - **FiveThirtyEight**
  - **FiveTV**
  - **Flickr**
- - **Flipagram**
  - **Folketinget**: Folketinget (ft.dk; Danish parliament)
  - **FootyRoom**
  - **Formula1**
  - **FOX**
  - **FOX9**
+ - **FOX9News**
  - **Foxgay**
  - **foxnews**: Fox News and Fox Business Video
  - **foxnews:article**
@@ -316,8 +309,6 @@
  - **FXNetworks**
  - **Gaia**
  - **GameInformer**
- - **GameOne**
- - **gameone:playlist**
  - **GameSpot**
  - **GameStar**
  - **Gaskrank**
@@ -332,14 +323,12 @@
  - **Globo**
  - **GloboArticle**
  - **Go**
- - **Go90**
  - **GodTube**
  - **Golem**
  - **GoogleDrive**
  - **Goshgay**
  - **GPUTechConf**
  - **Groupon**
- - **Hark**
  - **hbo**
  - **HearThisAt**
  - **Heise**
@@ -368,7 +357,6 @@
  - **Hungama**
  - **HungamaSong**
  - **Hypem**
- - **Iconosquare**
  - **ign.com**
  - **imdb**: Internet Movie Database trailers
  - **imdb:list**: Internet Movie Database lists
@@ -408,11 +396,11 @@
  - **Kankan**
  - **Karaoketv**
  - **KarriereVideos**
- - **keek**
  - **KeezMovies**
  - **Ketnet**
  - **KhanAcademy**
  - **KickStarter**
+ - **KinjaEmbed**
  - **KinoPoisk**
  - **KonserthusetPlay**
  - **kontrtube**: KontrTube.ru - Труба зовёт
@@ -432,7 +420,6 @@
  - **Lcp**
  - **LcpPlay**
  - **Le**: 乐视网
- - **Learnr**
  - **Lecture2Go**
  - **Lecturio**
  - **LecturioCourse**
@@ -466,11 +453,9 @@
  - **lynda**: lynda.com videos
  - **lynda:course**: lynda.com online courses
  - **m6**
- - **macgamestore**: MacGameStore trailers
  - **mailru**: Видео@Mail.Ru
  - **mailru:music**: Музыка@Mail.Ru
  - **mailru:music:search**: Музыка@Mail.Ru
- - **MakerTV**
  - **MallTV**
  - **mangomolo:live**
  - **mangomolo:video**
@@ -497,14 +482,12 @@
  - **Mgoon**
  - **MGTV**: 芒果TV
  - **MiaoPai**
- - **Minhateca**
  - **MinistryGrid**
  - **Minoto**
  - **miomio.tv**
  - **MiTele**: mitele.es
  - **mixcloud**
  - **mixcloud:playlist**
- - **mixcloud:stream**
  - **mixcloud:user**
  - **Mixer:live**
  - **Mixer:vod**
@@ -526,8 +509,8 @@
  - **mtg**: MTG services
  - **mtv**
  - **mtv.de**
- - **mtv81**
  - **mtv:video**
+ - **mtvjapan**
  - **mtvservices:embedded**
  - **MuenchenTV**: münchen.tv
  - **MusicPlayOn**
@@ -735,8 +718,6 @@
  - **Restudy**
  - **Reuters**
  - **ReverbNation**
- - **revision**
- - **revision3:embed**
  - **RICE**
  - **RMCDecouverte**
  - **RockstarGames**
@@ -782,6 +763,8 @@
  - **Screencast**
  - **ScreencastOMatic**
  - **scrippsnetworks:watch**
+ - **SCTE**
+ - **SCTECourse**
  - **Seeker**
  - **SenateISVP**
  - **SendtoNews**
@@ -815,6 +798,7 @@
  - **soundcloud:set**
  - **soundcloud:trackstation**
  - **soundcloud:user**
+ - **SoundcloudEmbed**
  - **soundgasm**
  - **soundgasm:profile**
  - **southpark.cc.com**
@@ -887,6 +871,7 @@
  - **TeleTask**
  - **Telewebion**
  - **TennisTV**
+ - **TenPlay**
  - **TF1**
  - **TFO**
  - **TheIntercept**
@@ -925,11 +910,11 @@
  - **tunein:topic**
  - **TunePk**
  - **Turbo**
- - **Tutv**
  - **tv.dfb.de**
  - **TV2**
  - **tv2.hu**
  - **TV2Article**
+ - **TV2DK**
  - **TV4**: tv4.se and tv4play.se
  - **TV5MondePlus**: TV5MONDE+
  - **TVA**
@@ -966,6 +951,7 @@
  - **twitch:vod**
  - **twitter**
  - **twitter:amplify**
+ - **twitter:broadcast**
  - **twitter:card**
  - **udemy**
  - **udemy:course**
